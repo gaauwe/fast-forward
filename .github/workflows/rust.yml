@@ -1,0 +1,115 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # This ensures we get all git history
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install Dependencies
+        run: |
+          brew install create-dmg
+          brew install yq
+
+      - name: Get Version
+        id: get_version
+        run: |
+          VERSION=$(yq -p=toml -r '.package.version' Cargo.toml)
+          echo "Version found: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Tag
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          VERSION="v${{ steps.get_version.outputs.version }}"
+
+          # Get the previous tag (excluding the one we just created)
+          PREV_TAG=$(git describe --tags --abbrev=0 "v${{ steps.get_version.outputs.version }}^" 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            # If no previous tag exists, get all commits up to current tag
+            COMMITS=$(git log "${VERSION}" --pretty=format:"%h %s" --no-merges)
+          else
+            # Get commits between previous tag and current tag
+            COMMITS=$(git log "${PREV_TAG}..${VERSION}" --pretty=format:"%h %s" --no-merges)
+          fi
+
+          # Convert commits to JSON array to preserve newlines
+          echo 'changelog<<EOF' >> $GITHUB_OUTPUT
+          echo "### What's Changed" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          while IFS= read -r line; do
+            HASH=$(echo "$line" | cut -d' ' -f1)
+            MSG=$(echo "$line" | cut -d' ' -f2-)
+            echo "* $MSG ([${HASH}](https://github.com/${{ github.repository }}/commit/${HASH}))" >> $GITHUB_OUTPUT
+          done <<< "$COMMITS"
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Build DMG
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          release_name: Release v${{ steps.get_version.outputs.version }}
+          draft: false
+          prerelease: false
+          body: |
+            ${{ steps.changelog.outputs.changelog }}
+
+            ### Installation Instructions
+
+            Since this is an unsigned application, you'll need to follow these steps to open it:
+
+            1. Download the DMG file
+            2. Try to mount the DMG by double-clicking it
+            3. When blocked, open System Settings > Privacy & Security
+            4. Scroll down and click "Open Anyway" for the DMG file
+            5. Mount the DMG by double-clicking it again
+            6. Drag FastForward.app to your Applications folder
+            7. Try to open FastForward.app from Applications folder
+            8. When blocked, open System Settings > Privacy & Security again
+            9. Scroll down and click "Open Anyway" for FastForward.app
+            10. Click "Open" in the final confirmation dialog
+
+            You only need to do this once. After the first launch, you can open the app normally.
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./FastForward.dmg
+          asset_name: FastForward.dmg
+          asset_content_type: application/x-apple-diskimage

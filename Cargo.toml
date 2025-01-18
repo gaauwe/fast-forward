@@ -1,0 +1,31 @@
+[package]
+name = "fast-forward"
+version = "0.1.0"
+edition = "2021"
+
+[package.metadata.bundle]
+name = "Fast Foward"
+identifier = "com.gaauwe.fast-forward"
+icon = ["assets/icon.icns"]
+version = "1.0.0"
+resources = []
+copyright = "Copyright © 2025"
+category = "Developer Tool"
+short_description = "Fast window switcher for macOS"
+osx_minimum_system_version = "10.13"
+
+[dependencies]
+cocoa = "0.25.0"
+core-graphics = "0.24.0"
+fuzzy-matcher = "0.3.7"
+global-hotkey = "0.6.3"
+gpui = { git = "https://github.com/zed-industries/zed" }
+image = "0.25"
+mouse_position = "0.1.4"
+rdev = { version = "0.5.3", features = ["unstable_grab"] }
+swift-rs = "1.0.6"
+tray-icon = "0.19.2"
+unicode-segmentation = "1.12.0"
+
+[build-dependencies]
+swift-rs = { version = "1.0.6", features = ["build"] }
