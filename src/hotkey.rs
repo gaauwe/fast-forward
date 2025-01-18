@@ -2,13 +2,25 @@ use std::{sync::mpsc::channel, time::Duration};
 
 use gpui::{AppContext, Global};
 use swift_rs::{swift, Bool};
-use rdev::{grab, EventType, Key, Event};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
+use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 
 use crate::{applications::Applications, window::Window};
 
 swift!(fn enable_accessibility_features() -> Bool);
 
+static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
+
 pub struct HotkeyManager {
+    _tap: CGEventTap<'static>,
+    _loop_source: CFRunLoopSource,
+}
+
+pub enum EventType {
+    KeyPress,
+    KeyRelease,
 }
 
 impl HotkeyManager {
@@ -18,23 +30,23 @@ impl HotkeyManager {
             enable_accessibility_features();
         }
 
-        let (sender, receiver) = channel::<Event>();
+        // Create channel for hiding/showing the window.
+        let (sender, receiver) = channel::<EventType>();
         cx.spawn(move |cx| async move {
             loop {
                 if let Ok(event) = receiver.try_recv() {
-                    match event.event_type {
-                        EventType::KeyPress(Key::MetaRight) => {
+                    match event {
+                        EventType::KeyPress => {
                             let _ = cx.update(|cx| {
                                 Window::new(cx);
                             });
                         }
-                        EventType::KeyRelease(Key::MetaRight) => {
+                        EventType::KeyRelease => {
                             let _ = cx.update(|cx| {
                                 Applications::focus_active_window(cx);
                                 Window::close(cx);
                             });
                         },
-                        _ => {}
                     }
                 }
 
@@ -45,22 +57,65 @@ impl HotkeyManager {
         })
         .detach();
 
+        // Create the event tap.
+        let current = CFRunLoop::get_current();
+        let tap = CGEventTap::new(
+            CGEventTapLocation::Session,
+            CGEventTapPlacement::HeadInsertEventTap,
+            CGEventTapOptions::Default,
+            vec![CGEventType::FlagsChanged, CGEventType::KeyDown],
+            move |_, event_type, event| {
+                let keycode = event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE);
+                let new_event = event.clone();
+                let mut flags = event.get_flags();
 
-        if let Err(error) = grab(move |event| {
-            match event.event_type {
-                EventType::KeyPress(Key::MetaRight) => {
-                    let _ = sender.send(event.clone());
-                    None
+                match event_type {
+                    CGEventType::FlagsChanged => {
+                        if keycode == 54 {
+                            let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
+                            if right_cmd_is_down {
+                                let _ = sender.send(EventType::KeyPress);
+                            } else {
+                                let _ = sender.send(EventType::KeyRelease);
+                            }
+
+                            RIGHT_CMD_IS_DOWN.store(right_cmd_is_down, Ordering::SeqCst);
+                        }
+                    },
+                    CGEventType::KeyDown => {
+                        if keycode == 54 || flags.contains(CGEventFlags::CGEventFlagCommand) {
+                            // If the event is a right command key press, block it (since that's our trigger).
+                            if keycode == 54 {
+                                new_event.set_type(CGEventType::Null);
+                            }
+                            // If the event is combined with the right command key, remove the command key from the flags.
+                            else if RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+                                flags.remove(CGEventFlags::CGEventFlagCommand);
+                                new_event.set_flags(flags);
+                            }
+                        }
+
+                    },
+                    _ => {}
                 }
-                EventType::KeyRelease(Key::MetaRight) => {
-                    let _ = sender.send(event.clone());
-                    None
-                }
-                _ => Some(event),
-            }
-        }) {
-            eprintln!("Error in grab: {:?}", error)
+
+                Some(new_event)
+            },
+        ).expect("Failed to create event tap");
+
+        let loop_source = tap.mach_port
+            .create_runloop_source(0)
+            .expect("Failed to create runloop source");
+
+        unsafe {
+            current.add_source(&loop_source, kCFRunLoopCommonModes);
+            tap.enable();
         }
+
+        cx.set_global(Self {
+            _tap: tap,
+            _loop_source: loop_source,
+        });
     }
 }
 
