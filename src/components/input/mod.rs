@@ -1,7 +1,7 @@
 use std::ops::Range;
 
 use gpui::{
-    actions, div, fill, hsla, point, prelude::*, px, relative, rgb, rgba, size, AppContext, Bounds, CursorStyle, ElementId,
+    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId,
     ElementInputHandler, FocusHandle, FocusableView, GlobalElementId,
     LayoutId, PaintQuad, Pixels,
     ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext,
@@ -9,7 +9,7 @@ use gpui::{
 };
 use unicode_segmentation::*;
 
-use crate::applications::Applications;
+use crate::{applications::Applications, theme::Theme};
 
 actions!(
     text_input,
@@ -305,6 +305,7 @@ impl Element for TextElement {
         _request_layout: &mut Self::RequestLayoutState,
         cx: &mut WindowContext,
     ) -> Self::PrepaintState {
+        let theme = cx.global::<Theme>();
         let input = self.input.read(cx);
         let content = input.content.clone();
         let selected_range = input.selected_range.clone();
@@ -312,7 +313,7 @@ impl Element for TextElement {
         let style = cx.text_style();
 
         let (display_text, text_color) = if content.is_empty() {
-            (input.placeholder.clone(), hsla(0., 0., 0.5, 1.))
+            (input.placeholder.clone(), theme.muted_foreground)
         } else {
             (content.clone(), style.color)
         };
@@ -365,7 +366,7 @@ impl Element for TextElement {
                     point(bounds.left() + cursor_pos, bounds.top() + Pixels(1.5)),
                     size(px(2.), bounds.bottom() - bounds.top() - Pixels(6.)),
                 ),
-                rgb(0x417E82),
+                theme.primary,
             ))
         } else {
             None
@@ -407,6 +408,8 @@ impl Element for TextElement {
 
 impl Render for TextInput {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+        let theme = cx.global::<Theme>();
+
         div()
             .flex()
             .key_context("TextInput")
@@ -417,13 +420,12 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::left))
             .on_action(cx.listener(Self::right))
             .border_b_1()
-            .border_color(rgb(0x505050))
+            .border_color(theme.border)
             .child(
                 div()
                     .w_full()
                     .p(px(4.))
                     .px(px(6.))
-                    .text_color(rgba(0xFFFFFFCC))
                     .child(TextElement {
                         input: cx.view().clone(),
                     }),

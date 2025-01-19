@@ -1,0 +1,14 @@
+[theme]
+# All color values are optional. If not specified, defaults will be used
+# Colors use HSL format (Hue, Saturation, Lightness, Alpha)
+# - h: Hue (0.0 to 1.0, multiply typical 0-360 values by 1/360)
+# - s: Saturation (0.0 to 1.0)
+# - l: Lightness (0.0 to 1.0)
+# - a: Alpha/Opacity (0.0 to 1.0)
+
+primary = { h = 0.508, s = 0.33, l = 0.38, a = 1.0 }
+background = { h = 0.0, s = 0.0, l = 0.15, a = 0.9 }
+foreground = { h = 0.0, s = 0.0, l = 1.0, a = 0.8 }
+muted = { h = 0.0, s = 0.0, l = 0.31, a = 1.0 }
+muted_foreground = { h = 0.0, s = 0.0, l = 1.0, a = 0.4 }
+border = { h = 0.0, s = 0.0, l = 0.31, a = 1.0 }
