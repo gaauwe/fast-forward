@@ -1,11 +1,9 @@
+mod blink_cursor;
 use std::ops::Range;
 
+use blink_cursor::BlinkCursor;
 use gpui::{
-    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId,
-    ElementInputHandler, FocusHandle, FocusableView, GlobalElementId,
-    LayoutId, PaintQuad, Pixels,
-    ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext,
-    ViewInputHandler, WindowContext,
+    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, GlobalElementId, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
 };
 use unicode_segmentation::*;
 
@@ -30,14 +28,18 @@ pub struct TextInput {
     marked_range: Option<Range<usize>>,
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
+    blink_cursor: Model<BlinkCursor>,
 }
 
 // Mostly copied from the TextInput example in the gpui repository, with some modifications.
 // - https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 impl TextInput {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
-        Self {
-            focus_handle: cx.focus_handle(),
+        let focus_handle = cx.focus_handle();
+        let blink_cursor = cx.new_model(|_| BlinkCursor::new());
+
+        let input = Self {
+            focus_handle,
             content: "".into(),
             placeholder: "Switch to...".into(),
             selected_range: 0..0,
@@ -45,10 +47,34 @@ impl TextInput {
             marked_range: None,
             last_layout: None,
             last_bounds: None,
-        }
+            blink_cursor,
+        };
+
+        // Observe the blink cursor to repaint the view when it changes.
+        cx.observe(&input.blink_cursor, |_, _, cx| cx.notify())
+            .detach();
+        // Blink the cursor when the window is active, pause when it's not.
+        cx.observe_window_activation(|input, cx| {
+            if cx.is_window_active() {
+                let focus_handle = input.focus_handle.clone();
+                if focus_handle.is_focused(cx) {
+                    input.blink_cursor.update(cx, |blink_cursor, cx| {
+                        blink_cursor.start(cx);
+                    });
+                }
+            } else {
+                input.blink_cursor.update(cx, |blink_cursor, cx| {
+                    blink_cursor.stop(cx);
+                });
+            }
+        })
+        .detach();
+
+        input
     }
 
     fn left(&mut self, _: &Left, cx: &mut ViewContext<Self>) {
+        self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), cx);
         } else {
@@ -57,6 +83,7 @@ impl TextInput {
     }
 
     fn right(&mut self, _: &Right, cx: &mut ViewContext<Self>) {
+        self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.next_boundary(self.selected_range.end), cx);
         } else {
@@ -70,6 +97,7 @@ impl TextInput {
     }
 
     fn backspace(&mut self, _: &Backspace, cx: &mut ViewContext<Self>) {
+        self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.select_to(self.previous_boundary(self.cursor_offset()), cx)
         }
@@ -77,6 +105,7 @@ impl TextInput {
     }
 
     fn move_to(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
+        self.pause_blink_cursor(cx);
         self.selected_range = offset..offset;
         cx.notify()
     }
@@ -87,6 +116,20 @@ impl TextInput {
         } else {
             self.selected_range.end
         }
+    }
+
+    fn pause_blink_cursor(&mut self, cx: &mut ViewContext<Self>) {
+        self.blink_cursor.update(cx, |cursor, cx| {
+            cursor.pause(cx);
+        });
+    }
+
+    fn on_key_down_for_blink_cursor(&mut self, _: &KeyDownEvent, cx: &mut ViewContext<Self>) {
+        self.pause_blink_cursor(cx)
+    }
+
+    pub(crate) fn show_cursor(&self, cx: &WindowContext) -> bool {
+        self.focus_handle.is_focused(cx) && self.blink_cursor.read(cx).visible()
     }
 
     fn select_to(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
@@ -360,7 +403,7 @@ impl Element for TextElement {
             .unwrap();
 
         let cursor_pos = line.x_for_index(cursor);
-        let cursor = if selected_range.is_empty() {
+        let cursor = if selected_range.is_empty() && input.show_cursor(cx) {
             Some(fill(
                 Bounds::new(
                     point(bounds.left() + cursor_pos, bounds.top() + Pixels(1.5)),
@@ -419,6 +462,7 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::left))
             .on_action(cx.listener(Self::right))
+            .on_key_down(cx.listener(Self::on_key_down_for_blink_cursor))
             .border_b_1()
             .border_color(theme.border)
             .child(
@@ -426,6 +470,7 @@ impl Render for TextInput {
                     .w_full()
                     .p(px(4.))
                     .px(px(6.))
+                    .text_color(theme.foreground)
                     .child(TextElement {
                         input: cx.view().clone(),
                     }),
