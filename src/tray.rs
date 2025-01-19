@@ -2,6 +2,8 @@ use std::time::Duration;
 use gpui::{AppContext, Global};
 use tray_icon::{menu::{Menu, MenuEvent, MenuItem}, TrayIcon, TrayIconBuilder};
 
+use crate::config::Config;
+
 pub struct Tray {
     _tray: TrayIcon,
 }
@@ -11,10 +13,12 @@ impl Tray {
         let icon = load_icon();
         let menu = Menu::new();
 
+        let settings_action = MenuItem::new("Settings", true, None);
         let about_action = MenuItem::new("About Fast Forward", true, None);
         let quit_action = MenuItem::new("Quit...", true, None);
 
         let _ = menu.append_items(&[
+            &settings_action,
             &about_action,
             &quit_action
         ]);
@@ -28,6 +32,14 @@ impl Tray {
         cx.spawn(|cx| async move {
             loop {
                 if let Ok(event) = MenuEvent::receiver().try_recv() {
+                    if event.id == settings_action.id() {
+                        let config_path = Config::config_path().unwrap();
+                        let _ = std::process::Command::new("open")
+                            .arg("-a")
+                            .arg("TextEdit")
+                            .arg(&config_path)
+                            .spawn();
+                    }
                     if event.id == about_action.id() {
                         let _ = cx.update(|cx| {
                             cx.open_url("https://github.com/gaauwe/fast-forward")

@@ -66,7 +66,7 @@ impl Config {
         Ok(())
     }
 
-    fn config_path() -> Result<PathBuf> {
+    pub fn config_path() -> Result<PathBuf> {
         let app_support_dir = dirs::config_dir()
             .context("Failed to get application config directory")?
             .join("FastForward");
