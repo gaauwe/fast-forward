@@ -2,7 +2,7 @@ use core_graphics::display::{CGDisplay, CGPoint};
 use gpui::*;
 use mouse_position::mouse_position::Mouse;
 
-use crate::{applications::Applications, components::{input::*, list::List}};
+use crate::{applications::Applications, ui::App};
 
 pub struct Window {}
 
@@ -10,14 +10,6 @@ impl Window {
     pub fn new(cx: &mut AppContext) {
         // Refresh the list of open application windows.
         Applications::new(cx);
-
-        // Attach key listeners.
-        cx.bind_keys([
-            KeyBinding::new("tab", Tab, None),
-            KeyBinding::new("backspace", Backspace, None),
-            KeyBinding::new("left", Left, None),
-            KeyBinding::new("right", Right, None),
-        ]);
 
         // Calculate the bounds of the active display.
         let display_id = Some(get_active_display_id(cx));
@@ -30,7 +22,7 @@ impl Window {
         });
 
         // Calculate the height and position of the window.
-        let height = Pixels(List::get_height(cx));
+        let height = Pixels(App::get_height(cx));
         let width = Pixels::from(544.0);
         let center = bounds.center();
         let x: Pixels = center.x - width / 2.0;
@@ -51,11 +43,7 @@ impl Window {
                 ..Default::default()
             },
             |cx| {
-                // Create the text input element.
-                let input = cx.new_view(|cx| TextInput::new(cx));
-
-                // Render the window.
-                cx.new_view(|_cx| List::new(input))
+                cx.new_view(|cx| App::new(cx))
             },
         )
         .unwrap();

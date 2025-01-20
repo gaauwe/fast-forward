@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use blink_cursor::BlinkCursor;
 use gpui::{
-    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, GlobalElementId, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
+    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
 };
 use unicode_segmentation::*;
 
@@ -69,6 +69,14 @@ impl TextInput {
             }
         })
         .detach();
+
+        // Attach key listeners.
+        cx.bind_keys([
+            KeyBinding::new("tab", Tab, None),
+            KeyBinding::new("backspace", Backspace, None),
+            KeyBinding::new("left", Left, None),
+            KeyBinding::new("right", Right, None),
+        ]);
 
         input
     }

@@ -1,5 +1,5 @@
 mod applications;
-mod components;
+mod ui;
 mod config;
 mod hotkey;
 mod theme;

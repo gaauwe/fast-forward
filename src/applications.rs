@@ -2,7 +2,7 @@ use gpui::*;
 use std::path::PathBuf;
 use swift_rs::{swift, Bool, Int, SRObjectArray, SRString};
 
-use crate::components::input::TextInput;
+use crate::ui::input::TextInput;
 
 pub struct Applications {
     pub windows: Vec<Window>,
