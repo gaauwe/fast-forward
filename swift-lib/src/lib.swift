@@ -42,8 +42,8 @@ func enableAccessibilityFeatures() -> Bool {
     return accessibilityEnabled
 }
 
-@_cdecl("activate_most_recent_window")
-func activateMostRecentWindow(pid: Int) {
+@_cdecl("fire_window_event")
+func fireWindowEvent(pid: Int, type: SRString) {
     let runningApps = NSWorkspace.shared.runningApplications
 
     guard let app = runningApps.first(where: { Int($0.processIdentifier) == pid }) else {
@@ -51,9 +51,16 @@ func activateMostRecentWindow(pid: Int) {
         return
     }
 
-    // By default, activation brings only the main and key windows forward
-    // - https://developer.apple.com/documentation/appkit/nsapplication/activationoptions?changes=_9
-    app.activate()
+    switch type.toString() {
+    case "minimize":
+        app.hide()
+    case "quit":
+        app.terminate()
+    default:
+        // By default, activation brings only the main and key windows forward
+        // - https://developer.apple.com/documentation/appkit/nsapplication/activationoptions?changes=_9
+        app.activate()
+    }
 }
 
 @_cdecl("get_application_windows")
@@ -92,6 +99,7 @@ func getApplicationWindows() -> SRObjectArray {
         }
     }
 
+    // TODO: Add support for hidden applications.
     return SRObjectArray(result)
 }
 

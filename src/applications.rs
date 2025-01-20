@@ -1,5 +1,5 @@
 use gpui::*;
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Duration};
 use swift_rs::{swift, Bool, Int, SRObjectArray, SRString};
 
 use crate::ui::input::TextInput;
@@ -34,7 +34,7 @@ struct Application {
 }
 
 swift!(fn get_application_windows() -> SRObjectArray<Application>);
-swift!(fn activate_most_recent_window(application_name: &Int) -> Bool);
+swift!(fn fire_window_event(application_name: &Int, action: SRString) -> Bool);
 
 impl Applications {
     pub fn new(cx: &mut AppContext) {
@@ -62,7 +62,7 @@ impl Applications {
         cx.set_global(applications);
     }
 
-    pub fn focus_active_window(cx: &mut AppContext) {
+    pub fn fire_event(cx: &mut AppContext, action: &str) {
         let applications = cx.global::<Applications>();
         if applications.filtered_windows.is_empty() {
             return;
@@ -70,8 +70,19 @@ impl Applications {
 
         let app_pid = applications.filtered_windows[applications.active_index].pid;
         unsafe {
-            activate_most_recent_window(&app_pid);
+            fire_window_event(&app_pid, SRString::from(action));
         }
+
+        // TODO: Improve application list refresh.
+        cx.spawn(|cx| async move {
+            cx.background_executor()
+                .timer(Duration::from_millis(25))
+                .await;
+
+            let _ = cx.update(|cx| {
+                Applications::new(cx);
+            });
+        }).detach();
     }
 
     pub fn filter_applications(cx: &mut ViewContext<TextInput>, input: &str) {

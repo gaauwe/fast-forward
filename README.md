@@ -7,7 +7,7 @@
 	A window switcher for macOS built in Rust using the <a href="https://www.gpui.rs/">gpui</a> framework by <a href="https://zed.dev/">Zed</a>
 </p>
 
-![fast-forward](https://github.com/user-attachments/assets/c8059157-31bf-45c4-adf2-07c39cc5f028)
+![image](https://github.com/user-attachments/assets/9f7d272d-9244-46e8-afc8-debfc4d1261e)
 
 > [!NOTE]
 > This application was developed as a personal learning project to explore and understand Rust programming concepts. While functional, it may contain bugs or unexpected behaviors. I am not responsible for missed meetings because you got too efficient, carpal tunnel from excessive app switching, or your cat learning to manipulate your windows after watching you use this tool

@@ -86,7 +86,7 @@ impl Render for App {
                             .text_color(theme.foreground)
                             .child("Quit")
                             .child(
-                                div().text_color(theme.muted_foreground).mb_0p5().child("⌘")
+                                div().text_color(theme.muted_foreground).mb_0p5().child("⎋")
                             ),
                     ),
             )
