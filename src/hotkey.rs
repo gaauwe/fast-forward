@@ -83,18 +83,15 @@ impl HotkeyManager {
                         }
                     },
                     CGEventType::KeyDown => {
-                        if keycode == 54 || flags.contains(CGEventFlags::CGEventFlagCommand) {
-                            // If the event is a right command key press, block it (since that's our trigger).
-                            if keycode == 54 {
-                                new_event.set_type(CGEventType::Null);
-                            }
-                            // If the event is combined with the right command key, remove the command key from the flags.
-                            else if RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
-                                flags.remove(CGEventFlags::CGEventFlagCommand);
-                                new_event.set_flags(flags);
-                            }
+                        // If the event is a right command key press, block it (since that's our trigger).
+                        if keycode == 54 {
+                            new_event.set_type(CGEventType::Null);
                         }
-
+                        // If the event is combined with the right command key, remove the command key from the flags.
+                        else if RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+                            flags.remove(CGEventFlags::CGEventFlagCommand);
+                            new_event.set_flags(flags);
+                        }
                     },
                     _ => {}
                 }
