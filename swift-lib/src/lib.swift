@@ -87,6 +87,14 @@ func getApplicationWindows() -> SRObjectArray {
         }
     }
 
+    // Add any applications that are running but don't have windows (not fully closed and therefore still in the dock).
+    runningApps.enumerated().forEach { (index: Int, app: NSRunningApplication) in
+        if app.activationPolicy == .regular && !windowLevelMap.values.contains(app) {
+           let baseIndex = windowLevelMap.count
+           windowLevelMap[baseIndex + index] = app
+        }
+    }
+
     var seenNames = Set<String>()
     windowLevelMap.sorted { $0.key < $1.key }.forEach { (key: Int, app: NSRunningApplication) in
         if let name = app.localizedName {
@@ -99,7 +107,6 @@ func getApplicationWindows() -> SRObjectArray {
         }
     }
 
-    // TODO: Add support for hidden applications.
     return SRObjectArray(result)
 }
 
