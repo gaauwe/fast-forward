@@ -40,6 +40,12 @@ pub enum MoveType {
     Away
 }
 
+pub enum IndexType {
+    Start,
+    Next,
+    Previous
+}
+
 swift!(fn get_active_app() -> SRString);
 swift!(fn get_application_windows() -> SRObjectArray<Application>);
 swift!(fn fire_window_event(application_name: &Int, action: SRString) -> Bool);
@@ -54,14 +60,20 @@ impl Applications {
         Self::subscribe_to_active_app(cx);
     }
 
-    pub fn next(cx: &mut AppContext) {
+    pub fn set_active_index(cx: &mut AppContext, index_type: IndexType) {
         let this = cx.global::<Applications>();
         let mut active_index = this.active_index;
 
-        if active_index < this.windows.len() - 1 {
-            active_index += 1;
-        } else {
-            active_index = 0;
+        match index_type {
+            IndexType::Start => active_index = 0,
+            IndexType::Next => active_index = (active_index + 1) % this.filtered_windows.len(),
+            IndexType::Previous => {
+                if active_index == 0 {
+                    active_index = this.filtered_windows.len() - 1;
+                } else {
+                    active_index -= 1;
+                }
+            }
         }
 
         let applications = Self {

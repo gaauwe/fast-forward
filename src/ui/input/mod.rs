@@ -7,12 +7,13 @@ use gpui::{
 };
 use unicode_segmentation::*;
 
-use crate::{applications::Applications, theme::Theme};
+use crate::{applications::{Applications, IndexType}, theme::Theme};
 
 actions!(
     text_input,
     [
         Tab,
+        ShiftTab,
         Backspace,
         Left,
         Right,
@@ -73,6 +74,8 @@ impl TextInput {
         // Attach key listeners.
         cx.bind_keys([
             KeyBinding::new("tab", Tab, None),
+            // TODO: Shift+Tab isn't recognized yet.
+            KeyBinding::new("shift-tab", Tab, None),
             KeyBinding::new("backspace", Backspace, None),
             KeyBinding::new("left", Left, None),
             KeyBinding::new("right", Right, None),
@@ -100,7 +103,12 @@ impl TextInput {
     }
 
     fn tab(&mut self, _: &Tab, cx: &mut ViewContext<Self>) {
-        Applications::next(cx);
+        Applications::set_active_index(cx, IndexType::Next);
+        cx.notify();
+    }
+
+    fn shift_tab(&mut self, _: &ShiftTab, cx: &mut ViewContext<Self>) {
+        Applications::set_active_index(cx, IndexType::Previous);
         cx.notify();
     }
 
@@ -467,6 +475,7 @@ impl Render for TextInput {
             .track_focus(&self.focus_handle(cx))
             .cursor(CursorStyle::IBeam)
             .on_action(cx.listener(Self::tab))
+            .on_action(cx.listener(Self::shift_tab))
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::left))
             .on_action(cx.listener(Self::right))
