@@ -63,6 +63,10 @@ impl TextInput {
         // Blink the cursor when the window is active, pause when it's not.
         cx.observe_window_activation(|input, cx| {
             if cx.is_window_active() {
+                // TODO: This is a hack to clear the search query when the window is re-activated.
+                input.content = "".into();
+                input.selected_range = 0..0;
+
                 let focus_handle = input.focus_handle.clone();
                 if focus_handle.is_focused(cx) {
                     input.blink_cursor.update(cx, |blink_cursor, cx| {

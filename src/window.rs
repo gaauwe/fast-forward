@@ -4,6 +4,12 @@ use mouse_position::mouse_position::Mouse;
 
 use crate::ui::App;
 
+pub struct ActiveDisplay {
+    pub id: DisplayId,
+}
+
+impl Global for ActiveDisplay {}
+
 pub struct Window {
     pub window: WindowHandle<App>,
 }
@@ -47,8 +53,6 @@ impl Window {
         )
         .unwrap();
 
-
-
         // Auto focus the input field.
         window
             .update(cx, |view, cx| {
@@ -57,9 +61,42 @@ impl Window {
             })
             .unwrap();
 
-        cx.set_global(Self{
+        cx.set_global(Self {
             window
         });
+
+        cx.set_global(ActiveDisplay {
+            id: display_id.unwrap(),
+        })
+    }
+
+    pub fn show(cx: &mut AppContext) {
+        let display_id = cx.global::<ActiveDisplay>().id;
+        let active_display_id = Some(get_active_display_id(cx)).unwrap();
+
+        if display_id != active_display_id {
+            Self::close(cx);
+
+            // Delay the opening of the window to prevent flickering.
+            cx.spawn(|cx| async move {
+                cx.background_executor().timer(std::time::Duration::from_millis(0)).await;
+                cx.update(|cx| {
+                    Self::new(cx);
+                })
+            }).detach();
+        }
+
+        let window = cx.global::<Window>();
+        window.window.clone().update(cx, |_view, cx| {
+            cx.activate(true);
+        }).ok();
+    }
+
+    pub fn hide(cx: &mut AppContext) {
+        let window = cx.global::<Window>();
+        window.window.clone().update(cx, |_view, cx| {
+            cx.hide();
+        }).ok();
     }
 
     pub fn close(cx: &mut AppContext) {

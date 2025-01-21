@@ -58,7 +58,7 @@ impl HotkeyManager {
                 match *rx.borrow() {
                     EventType::ShowWindow => {
                         let _ = cx.update(|cx| {
-                            Window::new(cx);
+                            Window::show(cx);
                         });
                     }
                     EventType::HideWindow => {
@@ -67,7 +67,7 @@ impl HotkeyManager {
                                 Applications::fire_event(cx, "activate");
                             }
 
-                            Window::close(cx);
+                            Window::hide(cx);
                             Applications::move_app(cx, None, MoveType::Top);
                             Applications::reset(cx);
                         });
