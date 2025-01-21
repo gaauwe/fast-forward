@@ -42,6 +42,22 @@ func enableAccessibilityFeatures() -> Bool {
     return accessibilityEnabled
 }
 
+@_cdecl("get_active_app")
+func getActiveApp() -> SRString {
+    let runningApps = NSWorkspace.shared.runningApplications
+
+    guard let app = runningApps.first(where: { $0.isActive }) else {
+        print("No active application.")
+        return SRString("")
+    }
+
+    if let localizedName = app.localizedName {
+        return SRString(localizedName)
+    }
+
+    return SRString("")
+}
+
 @_cdecl("fire_window_event")
 func fireWindowEvent(pid: Int, type: SRString) {
     let runningApps = NSWorkspace.shared.runningApplications

@@ -33,6 +33,7 @@ struct Application {
     pub pid: Int,
 }
 
+swift!(fn get_active_app() -> SRString);
 swift!(fn get_application_windows() -> SRObjectArray<Application>);
 swift!(fn fire_window_event(application_name: &Int, action: SRString) -> Bool);
 
@@ -42,6 +43,8 @@ impl Applications {
         let filtered_windows = windows.clone();
         let applications = Self { windows, filtered_windows, active_index: 0 };
         cx.set_global(applications);
+
+        Self::subscribe_to_active_app(cx);
     }
 
     pub fn next(cx: &mut AppContext) {
@@ -72,17 +75,6 @@ impl Applications {
         unsafe {
             fire_window_event(&app_pid, SRString::from(action));
         }
-
-        // TODO: Improve application list refresh.
-        cx.spawn(|cx| async move {
-            cx.background_executor()
-                .timer(Duration::from_millis(25))
-                .await;
-
-            let _ = cx.update(|cx| {
-                Applications::new(cx);
-            });
-        }).detach();
     }
 
     pub fn filter_applications(cx: &mut ViewContext<TextInput>, input: &str) {
@@ -124,6 +116,53 @@ impl Applications {
                 });
                 acc
             })
+    }
+
+    // TODO: Constantly polling for the active application is not ideal.
+    fn subscribe_to_active_app(cx: &mut AppContext) {
+        cx.spawn(|cx| async move {
+            let mut last_active_app = String::new();
+            loop {
+                let windows = cx.update(|cx| cx.windows());
+                match windows {
+                    Ok(windows) => {
+                        if windows.is_empty() {
+                            let active_app = unsafe { get_active_app() }.to_string();
+                            let test = active_app.clone();
+                            if active_app != last_active_app {
+                                last_active_app = active_app;
+
+                                // Re-order the applications list to put the active application first.
+                                let _ = cx.update(|cx| {
+                                    let applications = cx.global::<Applications>();
+                                    let mut applications = applications.clone();
+
+                                    applications.windows.sort_by(|a, b| {
+                                        if a.name == test {
+                                            std::cmp::Ordering::Less
+                                        } else if b.name == test {
+                                            std::cmp::Ordering::Greater
+                                        } else {
+                                            std::cmp::Ordering::Equal
+                                        }
+                                    });
+
+                                    applications.filtered_windows = applications.windows.clone();
+                                    applications.active_index = 0;
+
+                                    cx.set_global(applications);
+                                });
+                            }
+                        }
+                    },
+                    Err(_) => {}
+                }
+
+                cx.background_executor()
+                    .timer(Duration::from_millis(500))
+                    .await;
+            }
+        }).detach();
     }
 }
 

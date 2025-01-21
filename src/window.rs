@@ -2,15 +2,12 @@ use core_graphics::display::{CGDisplay, CGPoint};
 use gpui::*;
 use mouse_position::mouse_position::Mouse;
 
-use crate::{applications::Applications, ui::App};
+use crate::ui::App;
 
 pub struct Window {}
 
 impl Window {
     pub fn new(cx: &mut AppContext) {
-        // Refresh the list of open application windows.
-        Applications::new(cx);
-
         // Calculate the bounds of the active display.
         let display_id = Some(get_active_display_id(cx));
         let bounds = cx.displays().iter().find(|d| Some(d.id()) == display_id).map(|d| d.bounds()).unwrap_or(Bounds {

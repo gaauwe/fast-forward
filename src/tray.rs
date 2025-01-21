@@ -53,7 +53,7 @@ impl Tray {
                 }
 
                 cx.background_executor()
-                    .timer(Duration::from_millis(50))
+                    .timer(Duration::from_millis(500))
                     .await;
             }
         })
