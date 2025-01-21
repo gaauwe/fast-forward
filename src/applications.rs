@@ -3,20 +3,21 @@ use std::{path::PathBuf, time::Duration};
 use swift_rs::{swift, Bool, Int, SRObjectArray, SRString};
 
 use crate::ui::input::TextInput;
+use crate::window::Window;
 
 pub struct Applications {
-    pub windows: Vec<Window>,
-    pub filtered_windows: Vec<Window>,
+    pub windows: Vec<App>,
+    pub filtered_windows: Vec<App>,
     pub active_index: usize,
 }
 
-pub struct Window {
+pub struct App {
     pub name: String,
     pub pid: isize,
     pub icon_path: PathBuf,
 }
 
-impl Clone for Window {
+impl Clone for App {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
@@ -71,7 +72,7 @@ impl Applications {
         cx.set_global(applications);
     }
 
-    pub fn get_active_application(cx: &mut AppContext) -> Option<&Window> {
+    pub fn get_active_application(cx: &mut AppContext) -> Option<&App> {
         let applications = cx.global::<Applications>();
         applications.filtered_windows.get(applications.active_index)
     }
@@ -115,12 +116,12 @@ impl Applications {
         cx.set_global(applications);
     }
 
-    fn get_application_windows() -> Vec<Window> {
+    fn get_application_windows() -> Vec<App> {
         let applications = unsafe { get_application_windows() };
         applications
             .into_iter()
             .fold(Vec::new(), |mut acc, item| {
-                acc.push(Window {
+                acc.push(App {
                     name: item.name.to_string(),
                     pid: item.pid,
                     icon_path: PathBuf::from(item.path.to_string()),
@@ -185,9 +186,11 @@ impl Applications {
         }
 
         applications.filtered_windows = applications.windows.clone();
-        applications.active_index = 0;
-
         cx.set_global(applications);
+
+        // Re-render the list after the order has changed.
+        let window = cx.global::<Window>();
+        window.window.clone().update(cx, |_view, cx| cx.notify()).ok();
     }
 }
 

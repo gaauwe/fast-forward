@@ -4,7 +4,9 @@ use mouse_position::mouse_position::Mouse;
 
 use crate::ui::App;
 
-pub struct Window {}
+pub struct Window {
+    pub window: WindowHandle<App>,
+}
 
 impl Window {
     pub fn new(cx: &mut AppContext) {
@@ -54,6 +56,10 @@ impl Window {
                 cx.activate(true);
             })
             .unwrap();
+
+        cx.set_global(Self{
+            window
+        });
     }
 
     pub fn close(cx: &mut AppContext) {
