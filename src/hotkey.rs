@@ -6,7 +6,7 @@ use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 use tokio::sync::watch;
 
-use crate::{applications::{Applications, MoveType}, window::Window};
+use crate::{applications::{Applications, IndexType, MoveType}, window::Window};
 
 swift!(fn enable_accessibility_features() -> Bool);
 
@@ -58,6 +58,7 @@ impl HotkeyManager {
                 match *rx.borrow() {
                     EventType::ShowWindow => {
                         let _ = cx.update(|cx| {
+                            Applications::set_active_index(cx, IndexType::Start);
                             Window::new(cx);
                         });
                     }
