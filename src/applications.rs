@@ -118,7 +118,10 @@ impl Applications {
             })
     }
 
-    // TODO: Constantly polling for the active application is not ideal.
+    // TODO:
+    // - Constantly polling for the active application is not ideal.
+    // - When app is minimized, move it down the list.
+    // - When app is closed, remove it from the list.
     fn subscribe_to_active_app(cx: &mut AppContext) {
         cx.spawn(|cx| async move {
             let mut last_active_app = String::new();

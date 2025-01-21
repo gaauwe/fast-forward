@@ -26,6 +26,7 @@ image = "0.25"
 mouse_position = "0.1.4"
 serde = "1.0.217"
 swift-rs = "1.0.6"
+tokio = {version= "1.43.0", features = ["full"]}
 toml = "0.8.19"
 tray-icon = "0.19.2"
 unicode-segmentation = "1.12.0"

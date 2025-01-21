@@ -1,11 +1,10 @@
-use std::{sync::mpsc::channel, time::Duration};
-
 use gpui::*;
 use swift_rs::{swift, Bool};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
+use tokio::sync::watch;
 
 use crate::{applications::Applications, window::Window};
 
@@ -42,7 +41,8 @@ pub enum EventType {
     ShowWindow,
     HideWindow,
     MinimizeApplication,
-    QuitApplication
+    QuitApplication,
+    None
 }
 
 impl HotkeyManager {
@@ -52,45 +52,38 @@ impl HotkeyManager {
             enable_accessibility_features();
         }
 
-        // Create channel for hiding/showing the window.
-        let (sender, receiver) = channel::<EventType>();
-        cx.spawn(move |cx| async move {
-            loop {
-                if let Ok(event) = receiver.try_recv() {
-                    match event {
-                        EventType::ShowWindow => {
-                            let _ = cx.update(|cx| {
-                                Window::new(cx);
-                            });
-                        }
-                        EventType::HideWindow => {
-                            let _ = cx.update(|cx| {
-                                if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst)  {
-                                    Applications::fire_event(cx, "activate");
-                                }
-
-                                Window::close(cx);
-                            });
-                        },
-                        EventType::MinimizeApplication => {
-                            let _ = cx.update(|cx| {
-                                Applications::fire_event(cx, "minimize");
-                            });
-                        },
-                        EventType::QuitApplication => {
-                            let _ = cx.update(|cx| {
-                                Applications::fire_event(cx, "quit");
-                            });
-                        }
+        let (tx, mut rx) = watch::channel(EventType::None);
+        cx.spawn(|cx| async move {
+            while rx.changed().await.is_ok() {
+                match *rx.borrow() {
+                    EventType::ShowWindow => {
+                        let _ = cx.update(|cx| {
+                            Window::new(cx);
+                        });
                     }
-                }
+                    EventType::HideWindow => {
+                        let _ = cx.update(|cx| {
+                            if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst)  {
+                                Applications::fire_event(cx, "activate");
+                            }
 
-                cx.background_executor()
-                    .timer(Duration::from_millis(50))
-                    .await;
+                            Window::close(cx);
+                        });
+                    },
+                    EventType::MinimizeApplication => {
+                        let _ = cx.update(|cx| {
+                            Applications::fire_event(cx, "minimize");
+                        });
+                    },
+                    EventType::QuitApplication => {
+                        let _ = cx.update(|cx| {
+                            Applications::fire_event(cx, "quit");
+                        });
+                    },
+                    EventType::None => {}
+                }
             }
-        })
-        .detach();
+        }).detach();
 
         // Create the event tap.
         let current = CFRunLoop::get_current();
@@ -109,9 +102,9 @@ impl HotkeyManager {
                         if keycode == Key::RightCommand as i64 {
                             let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
                             if right_cmd_is_down {
-                                let _ = sender.send(EventType::ShowWindow);
+                                tx.send(EventType::ShowWindow).expect("Failed to send ShowWindow event");
                             } else {
-                                let _ = sender.send(EventType::HideWindow);
+                                tx.send(EventType::HideWindow).expect("Failed to send HideWindow event");
                             }
 
                             RIGHT_CMD_IS_DOWN.store(right_cmd_is_down, Ordering::SeqCst);
@@ -134,13 +127,13 @@ impl HotkeyManager {
 
                         match Key::from(keycode) {
                             Key::Escape => {
-                                let _ = sender.send(EventType::QuitApplication);
+                                tx.send(EventType::QuitApplication).expect("Failed to send QuitApplication event");
 
                                 new_event.set_type(CGEventType::Null);
                                 ESCAPE_PRESSED.store(true, Ordering::SeqCst);
                             },
                             Key::Space => {
-                                let _ = sender.send(EventType::MinimizeApplication);
+                                tx.send(EventType::MinimizeApplication).expect("Failed to send MinimizeApplication event");
 
                                 new_event.set_type(CGEventType::Null);
                                 SPACE_PRESSED.store(true, Ordering::SeqCst);
