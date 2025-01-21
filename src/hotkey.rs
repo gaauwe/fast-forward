@@ -6,7 +6,7 @@ use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 use tokio::sync::watch;
 
-use crate::{applications::Applications, window::Window};
+use crate::{applications::{Applications, MoveType}, window::Window};
 
 swift!(fn enable_accessibility_features() -> Bool);
 
@@ -68,16 +68,19 @@ impl HotkeyManager {
                             }
 
                             Window::close(cx);
+                            Applications::move_app(cx, None, MoveType::Top);
                         });
                     },
                     EventType::MinimizeApplication => {
                         let _ = cx.update(|cx| {
                             Applications::fire_event(cx, "minimize");
+                            Applications::move_app(cx, None, MoveType::Bottom);
                         });
                     },
                     EventType::QuitApplication => {
                         let _ = cx.update(|cx| {
                             Applications::fire_event(cx, "quit");
+                            Applications::move_app(cx, None, MoveType::Away);
                         });
                     },
                     EventType::None => {}

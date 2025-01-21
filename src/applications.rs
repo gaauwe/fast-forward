@@ -33,6 +33,12 @@ struct Application {
     pub pid: Int,
 }
 
+pub enum MoveType {
+    Top,
+    Bottom,
+    Away
+}
+
 swift!(fn get_active_app() -> SRString);
 swift!(fn get_application_windows() -> SRObjectArray<Application>);
 swift!(fn fire_window_event(application_name: &Int, action: SRString) -> Bool);
@@ -63,6 +69,11 @@ impl Applications {
             active_index
         };
         cx.set_global(applications);
+    }
+
+    pub fn get_active_application(cx: &mut AppContext) -> Option<&Window> {
+        let applications = cx.global::<Applications>();
+        applications.filtered_windows.get(applications.active_index)
     }
 
     pub fn fire_event(cx: &mut AppContext, action: &str) {
@@ -129,31 +140,15 @@ impl Applications {
                 let windows = cx.update(|cx| cx.windows());
                 match windows {
                     Ok(windows) => {
+                        // Never re-order the list if our application is in the foreground.
                         if windows.is_empty() {
                             let active_app = unsafe { get_active_app() }.to_string();
-                            let test = active_app.clone();
                             if active_app != last_active_app {
-                                last_active_app = active_app;
+                                last_active_app = active_app.clone();
 
                                 // Re-order the applications list to put the active application first.
                                 let _ = cx.update(|cx| {
-                                    let applications = cx.global::<Applications>();
-                                    let mut applications = applications.clone();
-
-                                    applications.windows.sort_by(|a, b| {
-                                        if a.name == test {
-                                            std::cmp::Ordering::Less
-                                        } else if b.name == test {
-                                            std::cmp::Ordering::Greater
-                                        } else {
-                                            std::cmp::Ordering::Equal
-                                        }
-                                    });
-
-                                    applications.filtered_windows = applications.windows.clone();
-                                    applications.active_index = 0;
-
-                                    cx.set_global(applications);
+                                    Self::move_app(cx, Some(active_app.as_str()), MoveType::Top);
                                 });
                             }
                         }
@@ -166,6 +161,33 @@ impl Applications {
                     .await;
             }
         }).detach();
+    }
+
+    pub fn move_app(cx: &mut AppContext, app_name: Option<&str>, move_type: MoveType) {
+        let applications = cx.global::<Applications>();
+        let mut applications = applications.clone();
+
+        // If no app name is provided, move the active application.
+        let app_name = app_name.unwrap_or_else(|| {
+            let active_app = Self::get_active_application(cx);
+            active_app.map(|app| app.name.as_str()).unwrap_or("")
+        });
+
+        let app_index = applications.windows.iter().position(|window| window.name == app_name);
+        if let Some(index) = app_index {
+            let app = applications.windows.remove(index);
+
+            match move_type {
+                MoveType::Top => applications.windows.insert(0, app),
+                MoveType::Bottom => applications.windows.push(app),
+                MoveType::Away => {}
+            }
+        }
+
+        applications.filtered_windows = applications.windows.clone();
+        applications.active_index = 0;
+
+        cx.set_global(applications);
     }
 }
 
