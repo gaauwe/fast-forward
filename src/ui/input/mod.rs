@@ -3,7 +3,7 @@ use std::ops::Range;
 
 use blink_cursor::BlinkCursor;
 use gpui::{
-    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
+    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
 };
 use unicode_segmentation::*;
 
@@ -19,6 +19,12 @@ actions!(
         Right,
     ]
 );
+
+pub struct SearchQuery {
+    pub query: String,
+}
+
+impl Global for SearchQuery {}
 
 pub struct TextInput {
     focus_handle: FocusHandle,
@@ -80,6 +86,10 @@ impl TextInput {
             KeyBinding::new("left", Left, None),
             KeyBinding::new("right", Right, None),
         ]);
+
+        cx.set_global(SearchQuery {
+            query: String::new()
+        });
 
         input
     }
@@ -266,9 +276,15 @@ impl ViewInputHandler for TextInput {
         self.selected_range = range.start + new_text.len()..range.start + new_text.len();
         self.marked_range.take();
 
+        cx.set_global(SearchQuery {
+            query: self.content.clone().into(),
+        });
 
         // Filter applications based on the new content.
-        Applications::filter_applications(cx, &self.content);
+        Applications::filter_applications(cx);
+
+        // Reset the active index after filtering.
+        Applications::set_active_index(cx, IndexType::Start);
 
         cx.notify();
     }
@@ -319,6 +335,8 @@ impl ViewInputHandler for TextInput {
         ))
     }
 }
+
+impl Global for TextInput {}
 
 struct TextElement {
     input: View<TextInput>,

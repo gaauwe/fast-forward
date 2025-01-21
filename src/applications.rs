@@ -2,7 +2,7 @@ use gpui::*;
 use std::{path::PathBuf, time::Duration};
 use swift_rs::{swift, Bool, Int, SRObjectArray, SRString};
 
-use crate::ui::input::TextInput;
+use crate::ui::input::{SearchQuery, TextInput};
 use crate::window::Window;
 
 pub struct Applications {
@@ -60,6 +60,17 @@ impl Applications {
         Self::subscribe_to_active_app(cx);
     }
 
+    pub fn reset(cx: &mut AppContext) {
+        let applications = cx.global::<Applications>();
+        let applications = Self {
+            windows: applications.windows.clone(),
+            filtered_windows: applications.windows.clone(),
+            active_index: 0
+        };
+        cx.set_global(applications);
+        cx.set_global(SearchQuery { query: String::new() });
+    }
+
     pub fn set_active_index(cx: &mut AppContext, index_type: IndexType) {
         let this = cx.global::<Applications>();
         let mut active_index = this.active_index;
@@ -101,30 +112,29 @@ impl Applications {
         }
     }
 
-    pub fn filter_applications(cx: &mut ViewContext<TextInput>, input: &str) {
+    pub fn filter_applications(cx: &mut AppContext) {
+        let query = cx.global::<SearchQuery>().query.as_str();
         let applications = cx.global::<Applications>();
         let mut applications = applications.clone();
-        if !input.is_empty() {
+        if !query.is_empty() {
             use fuzzy_matcher::skim::SkimMatcherV2;
             use fuzzy_matcher::FuzzyMatcher;
             let matcher = SkimMatcherV2::default();
 
             applications.filtered_windows = applications.windows.clone();
             applications.filtered_windows.retain(|window| {
-                matcher.fuzzy_match(&window.name, input).is_some()
+                matcher.fuzzy_match(&window.name, query).is_some()
             });
 
             applications.filtered_windows.sort_by(|a, b| {
-                let score_a = matcher.fuzzy_match(&a.name, input).unwrap_or(0);
-                let score_b = matcher.fuzzy_match(&b.name, input).unwrap_or(0);
+                let score_a = matcher.fuzzy_match(&a.name, query).unwrap_or(0);
+                let score_b = matcher.fuzzy_match(&b.name, query).unwrap_or(0);
                 score_b.cmp(&score_a)
             });
         } else {
             applications.filtered_windows = applications.windows.clone();
         }
 
-        // Reset the active index after filtering.
-        applications.active_index = 0;
         cx.set_global(applications);
     }
 
@@ -197,8 +207,9 @@ impl Applications {
             }
         }
 
-        applications.filtered_windows = applications.windows.clone();
+        // TODO: Refactor `filter_applications` to return the filtered list.
         cx.set_global(applications);
+        Self::filter_applications(cx);
 
         // Re-render the list after the order has changed.
         let window = cx.global::<Window>();
