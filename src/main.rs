@@ -1,26 +1,36 @@
 mod applications;
-mod ui;
 mod config;
 mod hotkey;
 mod theme;
+mod socket;
 mod tray;
+mod ui;
 mod window;
+
+use std::fs;
+use std::path::PathBuf;
 
 use applications::Applications;
 use config::Config;
-use hotkey::HotkeyManager;
+use hotkey::Hotkey;
+use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;
 use theme::Theme;
+use socket::Socket;
 use tray::Tray;
 use window::Window;
-
 use cocoa::appkit::NSApplication;
 use cocoa::appkit::NSApplicationActivationPolicy;
 use cocoa::base::nil;
 
 use gpui::*;
 
-fn main() {
-    App::new().run(|cx: &mut AppContext| {
+#[tokio::main]
+async fn main() {
+    App::new()
+        .with_assets(Assets {
+            base: PathBuf::from("assets"),
+        })
+        .run(|cx: &mut AppContext| {
         // Start the application in accessory mode, which means it won't appear in the dock.
         // - https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/accessory
         unsafe {
@@ -28,22 +38,43 @@ fn main() {
             ns_app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory);
         }
 
-        // Create tray icon.
+        // Check if the application is trusted to access the accessibility API.
+        if application_is_trusted_with_prompt() {
+            Socket::new(cx);
+            Hotkey::new(cx);
+        }
+
         Tray::new(cx);
-
-        // Create the global hotkey manager.
-        HotkeyManager::new(cx);
-
-        // Load configuration.
-        Config::new(cx);
-
-        // Initialize the theme.
-        Theme::new(cx);
-
-        // Initialize the list of open application windows.
         Applications::new(cx);
-
-        // Initialize the window.
+        Config::new(cx);
+        Theme::new(cx);
         Window::new(cx);
     });
+}
+
+struct Assets {
+    base: PathBuf,
+}
+
+impl AssetSource for Assets {
+    fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
+        fs::read(self.base.join(path))
+            .map(|data| Some(std::borrow::Cow::Owned(data)))
+            .map_err(|err| err.into())
+    }
+
+    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
+        fs::read_dir(self.base.join(path))
+            .map(|entries| {
+                entries
+                    .filter_map(|entry| {
+                        entry
+                            .ok()
+                            .and_then(|entry| entry.file_name().into_string().ok())
+                            .map(SharedString::from)
+                    })
+                    .collect()
+            })
+            .map_err(|err| err.into())
+    }
 }

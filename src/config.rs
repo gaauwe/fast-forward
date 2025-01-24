@@ -25,7 +25,7 @@ impl Config {
         cx.set_global(config);
     }
 
-    pub fn load() -> Result<Self> {
+    fn load() -> Result<Self> {
         let config_path = Self::config_path()?;
         if !config_path.exists() {
             Self::create_example_config(&config_path)?;

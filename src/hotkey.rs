@@ -1,20 +1,17 @@
 use gpui::*;
-use swift_rs::{swift, Bool};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 use tokio::sync::watch;
 
-use crate::{applications::{Applications, IndexType, MoveType}, window::Window};
-
-swift!(fn enable_accessibility_features() -> Bool);
+use crate::{applications::{ActionType, Applications}, window::Window};
 
 static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
 static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
 static SPACE_PRESSED: AtomicBool = AtomicBool::new(false);
 
-pub struct HotkeyManager {
+pub struct Hotkey {
     _tap: CGEventTap<'static>,
     _loop_source: CFRunLoopSource,
 }
@@ -40,18 +37,13 @@ impl From<i64> for Key {
 pub enum EventType {
     ShowWindow,
     HideWindow,
-    MinimizeApplication,
+    HideApplication,
     QuitApplication,
     None
 }
 
-impl HotkeyManager {
+impl Hotkey {
     pub fn new(cx: &mut AppContext) {
-        // Enable accessibility features.
-        unsafe {
-            enable_accessibility_features();
-        }
-
         let (tx, mut rx) = watch::channel(EventType::None);
         cx.spawn(|cx| async move {
             while rx.changed().await.is_ok() {
@@ -64,24 +56,20 @@ impl HotkeyManager {
                     EventType::HideWindow => {
                         let _ = cx.update(|cx| {
                             if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst)  {
-                                Applications::fire_event(cx, "activate");
+                                Applications::execute_action(cx, ActionType::Activate)
                             }
 
                             Window::hide(cx);
-                            Applications::move_app(cx, None, MoveType::Top);
-                            Applications::reset(cx);
                         });
                     },
-                    EventType::MinimizeApplication => {
+                    EventType::HideApplication => {
                         let _ = cx.update(|cx| {
-                            Applications::fire_event(cx, "minimize");
-                            Applications::move_app(cx, None, MoveType::Bottom);
+                            Applications::execute_action(cx, ActionType::Hide)
                         });
                     },
                     EventType::QuitApplication => {
                         let _ = cx.update(|cx| {
-                            Applications::fire_event(cx, "quit");
-                            Applications::move_app(cx, None, MoveType::Away);
+                            Applications::execute_action(cx, ActionType::Quit)
                         });
                     },
                     EventType::None => {}
@@ -89,7 +77,6 @@ impl HotkeyManager {
             }
         }).detach();
 
-        // Create the event tap.
         let current = CFRunLoop::get_current();
         let tap = CGEventTap::new(
             CGEventTapLocation::Session,
@@ -137,7 +124,7 @@ impl HotkeyManager {
                                 ESCAPE_PRESSED.store(true, Ordering::SeqCst);
                             },
                             Key::Space => {
-                                tx.send(EventType::MinimizeApplication).expect("Failed to send MinimizeApplication event");
+                                tx.send(EventType::HideApplication).expect("Failed to send HideApplication event");
 
                                 new_event.set_type(CGEventType::Null);
                                 SPACE_PRESSED.store(true, Ordering::SeqCst);
@@ -171,4 +158,4 @@ impl HotkeyManager {
     }
 }
 
-impl Global for HotkeyManager {}
+impl Global for Hotkey {}

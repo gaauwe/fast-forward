@@ -1,6 +1,6 @@
 mod blink_cursor;
-use std::ops::Range;
 
+use std::ops::Range;
 use blink_cursor::BlinkCursor;
 use gpui::{
     actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
@@ -21,14 +21,14 @@ actions!(
 );
 
 pub struct SearchQuery {
-    pub query: String,
+    pub value: String,
 }
 
 impl Global for SearchQuery {}
 
 pub struct TextInput {
     focus_handle: FocusHandle,
-    pub content: SharedString,
+    pub value: SharedString,
     placeholder: SharedString,
     selected_range: Range<usize>,
     selection_reversed: bool,
@@ -46,14 +46,14 @@ impl TextInput {
         let blink_cursor = cx.new_model(|_| BlinkCursor::new());
 
         let input = Self {
-            focus_handle,
-            content: "".into(),
+            value: "".into(),
             placeholder: "Switch to...".into(),
             selected_range: 0..0,
             selection_reversed: false,
             marked_range: None,
             last_layout: None,
             last_bounds: None,
+            focus_handle,
             blink_cursor,
         };
 
@@ -64,7 +64,7 @@ impl TextInput {
         cx.observe_window_activation(|input, cx| {
             if cx.is_window_active() {
                 // TODO: This is a hack to clear the search query when the window is re-activated.
-                input.content = "".into();
+                input.value = "".into();
                 input.selected_range = 0..0;
 
                 let focus_handle = input.focus_handle.clone();
@@ -92,7 +92,7 @@ impl TextInput {
         ]);
 
         cx.set_global(SearchQuery {
-            query: String::new()
+            value: String::new()
         });
 
         input
@@ -117,12 +117,12 @@ impl TextInput {
     }
 
     fn tab(&mut self, _: &Tab, cx: &mut ViewContext<Self>) {
-        Applications::set_active_index(cx, IndexType::Next);
+        Applications::update_active_index(cx, IndexType::Next);
         cx.notify();
     }
 
     fn shift_tab(&mut self, _: &ShiftTab, cx: &mut ViewContext<Self>) {
-        Applications::set_active_index(cx, IndexType::Previous);
+        Applications::update_active_index(cx, IndexType::Previous);
         cx.notify();
     }
 
@@ -179,7 +179,7 @@ impl TextInput {
         let mut utf8_offset = 0;
         let mut utf16_count = 0;
 
-        for ch in self.content.chars() {
+        for ch in self.value.chars() {
             if utf16_count >= offset {
                 break;
             }
@@ -194,7 +194,7 @@ impl TextInput {
         let mut utf16_offset = 0;
         let mut utf8_count = 0;
 
-        for ch in self.content.chars() {
+        for ch in self.value.chars() {
             if utf8_count >= offset {
                 break;
             }
@@ -214,7 +214,7 @@ impl TextInput {
     }
 
     fn previous_boundary(&self, offset: usize) -> usize {
-        self.content
+        self.value
             .grapheme_indices(true)
             .rev()
             .find_map(|(idx, _)| (idx < offset).then_some(idx))
@@ -222,10 +222,10 @@ impl TextInput {
     }
 
     fn next_boundary(&self, offset: usize) -> usize {
-        self.content
+        self.value
             .grapheme_indices(true)
             .find_map(|(idx, _)| (idx > offset).then_some(idx))
-            .unwrap_or(self.content.len())
+            .unwrap_or(self.value.len())
     }
 }
 
@@ -238,7 +238,7 @@ impl ViewInputHandler for TextInput {
     ) -> Option<String> {
         let range = self.range_from_utf16(&range_utf16);
         actual_range.replace(self.range_to_utf16(&range));
-        Some(self.content[range].to_string())
+        Some(self.value[range].to_string())
     }
 
     fn selected_text_range(
@@ -274,22 +274,18 @@ impl ViewInputHandler for TextInput {
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
 
-        self.content =
-            (self.content[0..range.start].to_owned() + new_text + &self.content[range.end..])
+        self.value =
+            (self.value[0..range.start].to_owned() + new_text + &self.value[range.end..])
                 .into();
         self.selected_range = range.start + new_text.len()..range.start + new_text.len();
         self.marked_range.take();
 
         cx.set_global(SearchQuery {
-            query: self.content.clone().into(),
+            value: self.value.clone().into(),
         });
 
-        // Filter applications based on the new content.
-        Applications::filter_applications(cx);
-
         // Reset the active index after filtering.
-        Applications::set_active_index(cx, IndexType::Start);
-
+        Applications::update_active_index(cx, IndexType::Start);
         cx.notify();
     }
 
@@ -306,8 +302,8 @@ impl ViewInputHandler for TextInput {
             .or(self.marked_range.clone())
             .unwrap_or(self.selected_range.clone());
 
-        self.content =
-            (self.content[0..range.start].to_owned() + new_text + &self.content[range.end..])
+        self.value =
+            (self.value[0..range.start].to_owned() + new_text + &self.value[range.end..])
                 .into();
         self.marked_range = Some(range.start..range.start + new_text.len());
         self.selected_range = new_selected_range_utf16
@@ -388,15 +384,15 @@ impl Element for TextElement {
     ) -> Self::PrepaintState {
         let theme = cx.global::<Theme>();
         let input = self.input.read(cx);
-        let content = input.content.clone();
+        let value = input.value.clone();
         let selected_range = input.selected_range.clone();
         let cursor = input.cursor_offset();
         let style = cx.text_style();
 
-        let (display_text, text_color) = if content.is_empty() {
+        let (display_text, text_color) = if value.is_empty() {
             (input.placeholder.clone(), theme.muted_foreground)
         } else {
-            (content.clone(), style.color)
+            (value.clone(), style.color)
         };
 
         let run = TextRun {

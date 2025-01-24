@@ -1,42 +1,129 @@
+pub mod icon;
 pub mod input;
 pub mod list;
 
 use gpui::*;
-use input::TextInput;
+use input::{SearchQuery, TextInput};
+use prelude::FluentBuilder;
+use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;
 
 use crate::{applications::Applications, theme::Theme, ui::list::List};
 
-pub struct App {
+pub struct Container {
     pub input: View<TextInput>,
     pub list: View<List>,
+    pub trusted: bool
 }
 
-impl App {
+pub static LIST_ITEM_HEIGHT: f32 = 40.;
+pub static INPUT_HEIGHT: f32 = 51.;
+pub static ACTION_BAR_HEIGHT: f32 = 36.;
+pub static EMPTY_PLACEHOLDER_HEIGHT: f32 = 100.;
+
+impl Container {
     pub fn new(cx: &mut ViewContext<Self>) -> Self {
         let input = cx.new_view(|cx| TextInput::new(cx));
-        let list = cx.new_view(|_cx| List::new());
+        let list = cx.new_view(|cx| List::new(cx));
 
-        Self { input, list }
+        let trusted = application_is_trusted_with_prompt();
+
+        Self { input, list, trusted }
     }
 
-    pub fn get_height(cx: &AppContext) -> f32 {
+    fn update_accessibility_permission(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+        if application_is_trusted_with_prompt() {
+            if let Ok(current_exe) = std::env::current_exe() {
+                cx.restart(Some(current_exe));
+            } else {
+                cx.restart(None);
+            }
+        }
+    }
+
+    pub fn get_height(&self, cx: &AppContext) -> f32 {
         let applications = cx.global::<Applications>();
-        let max_items = applications.filtered_windows.len();
-        (max_items as f32 * 40.0) + 51. + 36.
+        let query = cx.global::<SearchQuery>().value.as_str();
+
+        let list = self.list.read(cx).filter(query, applications.list.clone());
+        let max_items = list.len();
+
+        if max_items > 0 && self.trusted {
+            return (max_items as f32 * LIST_ITEM_HEIGHT) + INPUT_HEIGHT + ACTION_BAR_HEIGHT;
+        }
+
+        // Default height if no windows are found.
+        EMPTY_PLACEHOLDER_HEIGHT + INPUT_HEIGHT + ACTION_BAR_HEIGHT
+    }
+
+    fn render_accessibility_prompt(
+        &self,
+        theme: &Theme,
+        listener: impl Fn(&ClickEvent, &mut WindowContext) + 'static
+    ) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .flex_1()
+            .gap_neg_1()
+            .items_center()
+            .justify_center()
+            .text_sm()
+            .text_color(theme.foreground)
+            .child("Please grant accessibility permissions in your")
+            .child("system settings for the app to function correctly.")
+            .child(
+                div()
+                    .id("permissions")
+                    .flex()
+                    .text_color(theme.foreground)
+                    .bg(theme.primary)
+                    .hover(|style| {
+                        let mut bg = theme.primary;
+                        bg.fade_out(0.15);
+                        style.bg(bg)
+                    })
+                    .active(|style| {
+                        let mut bg = theme.primary;
+                        bg.fade_out(0.25);
+                        style.bg(bg)
+                    })
+                    .on_click(listener)
+                    .text_sm()
+                    .rounded_md()
+                    .pt_px()
+                    .px_2()
+                    .mt_3()
+                    .cursor_pointer()
+                    .child("Check again")
+            )
+    }
+
+    fn render_action_button(
+        &self,
+        theme: &Theme,
+        label: impl Into<String>,
+        shortcut: impl Into<String>
+    ) -> impl IntoElement {
+        div()
+            .flex()
+            .gap_1()
+            .items_center()
+            .text_sm()
+            .text_color(theme.foreground)
+            .child(label.into())
+            .child(
+                div()
+                    .text_color(theme.muted_foreground)
+                    .mb_0p5()
+                    .child(shortcut.into())
+            )
     }
 }
 
-impl Render for App {
+impl Render for Container {
     fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
-        let applications = cx.global::<Applications>();
-
-        // Default height if no windows are found.
-        let height = if applications.filtered_windows.len() > 0 {
-            Self::get_height(cx)
-        } else {
-            100. + 51. + 32.
-        };
+        let height = self.get_height(cx);
 
         div()
             .flex()
@@ -51,7 +138,12 @@ impl Render for App {
             .p(px(5.0))
             .mx(px(10.))
             .child(self.input.clone())
-            .child(self.list.clone())
+            .when(self.trusted, |cx| {
+                cx.child(self.list.clone())
+            })
+            .when(!self.trusted, |element| {
+                element.child(self.render_accessibility_prompt(theme, cx.listener(Self::update_accessibility_permission)))
+            })
             .child(
                 div()
                     .flex()
@@ -65,30 +157,8 @@ impl Render for App {
                     .text_color(theme.muted_foreground)
                     .border_t_1()
                     .border_color(theme.border)
-                    .child(
-                        div()
-                            .flex()
-                            .gap_1()
-                            .items_center()
-                            .text_sm()
-                            .text_color(theme.foreground)
-                            .child("Minimize")
-                            .child(
-                                div().text_color(theme.muted_foreground).mb_1().child("␣")
-                            ),
-                    )
-                    .child(
-                        div()
-                            .flex()
-                            .gap_1()
-                            .items_center()
-                            .text_sm()
-                            .text_color(theme.foreground)
-                            .child("Quit")
-                            .child(
-                                div().text_color(theme.muted_foreground).mb_0p5().child("⎋")
-                            ),
-                    ),
+                    .child(self.render_action_button(theme, "Hide", "␣"))
+                    .child(self.render_action_button(theme, "Quit", "⎋")),
             )
     }
 }

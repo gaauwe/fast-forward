@@ -2,22 +2,17 @@ use core_graphics::display::{CGDisplay, CGPoint};
 use gpui::*;
 use mouse_position::mouse_position::Mouse;
 
-use crate::ui::App;
-
-pub struct ActiveDisplay {
-    pub id: DisplayId,
-}
-
-impl Global for ActiveDisplay {}
+use crate::{applications::{Applications, IndexType}, ui::{input::SearchQuery, Container}};
 
 pub struct Window {
-    pub window: WindowHandle<App>,
+    pub window: WindowHandle<Container>,
+    pub display_id: DisplayId,
 }
 
 impl Window {
     pub fn new(cx: &mut AppContext) {
         // Calculate the bounds of the active display.
-        let display_id = Some(get_active_display_id(cx));
+        let display_id = Some(Self::get_active_display_id(cx));
         let bounds = cx.displays().iter().find(|d| Some(d.id()) == display_id).map(|d| d.bounds()).unwrap_or(Bounds {
             origin: Point::new(Pixels::from(0.0), Pixels::from(0.0)),
             size: Size {
@@ -27,7 +22,7 @@ impl Window {
         });
 
         // Calculate the height and position of the window.
-        let height = Pixels(App::get_height(cx));
+        let height = Pixels(bounds.size.height.0 * 0.5);
         let width = Pixels::from(544.0);
         let center = bounds.center();
         let x: Pixels = center.x - width / 2.0;
@@ -48,7 +43,7 @@ impl Window {
                 ..Default::default()
             },
             |cx| {
-                cx.new_view(|cx| App::new(cx))
+                cx.new_view(|cx| Container::new(cx))
             },
         )
         .unwrap();
@@ -62,18 +57,16 @@ impl Window {
             .unwrap();
 
         cx.set_global(Self {
-            window
+            window,
+            display_id: display_id.unwrap(),
         });
-
-        cx.set_global(ActiveDisplay {
-            id: display_id.unwrap(),
-        })
     }
 
     pub fn show(cx: &mut AppContext) {
-        let display_id = cx.global::<ActiveDisplay>().id;
-        let active_display_id = Some(get_active_display_id(cx)).unwrap();
+        let display_id = cx.global::<Self>().display_id;
+        let active_display_id = Self::get_active_display_id(cx);
 
+        // If the display has changed, close the current window and open a new one.
         if display_id != active_display_id {
             Self::close(cx);
 
@@ -93,53 +86,69 @@ impl Window {
     }
 
     pub fn hide(cx: &mut AppContext) {
+        // Hide the window and reset the input field.
         let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, cx| {
+        window.window.clone().update(cx, |view, cx| {
             cx.hide();
+
+
+            view.input.update(cx, |input, _cx| {
+                input.value = "".into();
+            });
+            cx.notify();
         }).ok();
+
+        // Clear the search query when the window is hidden (after a short delay).
+        cx.spawn(|cx| async move {
+            cx.background_executor().timer(std::time::Duration::from_millis(0)).await;
+            cx.update(|cx| {
+                cx.set_global(SearchQuery { value: String::new() });
+            })
+        }).detach();
+
+        // Reset the active index when the window is hidden.
+        Applications::update_active_index(cx, IndexType::Start);
     }
 
     pub fn close(cx: &mut AppContext) {
-        let windows = cx.windows();
-        for window in windows {
-            cx.update_window(window, |_, cx| {
-                cx.remove_window();
-            }).ok();
+        let window = cx.global::<Window>();
+        window.window.clone().update(cx, |_view, cx| {
+            cx.remove_window();
+        }).ok();
+    }
+
+    fn get_active_display_id(cx: &mut AppContext) -> DisplayId {
+        let mouse_location = Mouse::get_mouse_position();
+        let gpui_displays = cx.displays();
+        let fallback_display_id = gpui_displays.first().unwrap().id();
+
+        match mouse_location {
+            Mouse::Position { x, y } => {
+                // Get all active displays.
+                let displays = CGDisplay::active_displays().unwrap_or_default();
+
+                // Check for each display if the mouse is in its bounds.
+                for display_id in displays {
+                    let display = CGDisplay::new(display_id);
+                    let bounds = display.bounds();
+
+                    if bounds.contains(&CGPoint { x: x as f64, y: y as f64 }) {
+                        // Find the corresponding GPUI display, since that returns a DisplayId that we can use to open a window.
+                        let gpui_display = gpui_displays.iter().find(|d| {
+                            // We can't access the private integer, but the struct does implement fmt based on the private integer 🥴.
+                            let id = format!("{:?}", d.id());
+                            id == format!("DisplayId({})", display_id)
+                        });
+
+                        return gpui_display.unwrap().id();
+                    }
+                }
+
+                fallback_display_id
+            },
+            Mouse::Error => fallback_display_id,
         }
     }
 }
 
 impl Global for Window {}
-
-fn get_active_display_id(cx: &mut AppContext) -> DisplayId {
-    let mouse_location = Mouse::get_mouse_position();
-    let gpui_displays = cx.displays();
-    let fallback_display_id = gpui_displays.first().unwrap().id();
-
-    match mouse_location {
-        Mouse::Position { x, y } => {
-            // Get all active displays.
-            let displays = CGDisplay::active_displays().unwrap_or_default();
-
-            // Check for each display if the mouse is in its bounds.
-            for display_id in displays {
-                let display = CGDisplay::new(display_id);
-                let bounds = display.bounds();
-
-                if bounds.contains(&CGPoint { x: x as f64, y: y as f64 }) {
-                    // Find the corresponding GPUI display, since that returns a DisplayId that we can use to open a window.
-                    let gpui_display = gpui_displays.iter().find(|d| {
-                        // We can't access the private integer, but the struct does implement fmt based on the private integer 🥴.
-                        let id = format!("{:?}", d.id());
-                        id == format!("DisplayId({})", display_id)
-                    });
-
-                    return gpui_display.unwrap().id();
-                }
-            }
-
-            fallback_display_id
-        },
-        Mouse::Error => fallback_display_id,
-    }
-}

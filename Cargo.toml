@@ -1,6 +1,6 @@
 [package]
 name = "fast-forward"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 
 [package.metadata.bundle]
@@ -23,10 +23,15 @@ dirs = "6.0.0"
 fuzzy-matcher = "0.3.7"
 gpui = { git = "https://github.com/zed-industries/zed" }
 image = "0.25"
+macos-accessibility-client = "0.0.1"
 mouse_position = "0.1.4"
+objc2 = "0.6.0"
+objc2-app-kit = "0.3.0"
 serde = "1.0.217"
+serde_json = "1.0.137"
 swift-rs = "1.0.6"
 tokio = {version= "1.43.0", features = ["full"]}
+tokio-uds = "0.2.7"
 toml = "0.8.19"
 tray-icon = "0.19.2"
 unicode-segmentation = "1.12.0"

@@ -8,6 +8,23 @@ pub struct Tray {
     _tray: TrayIcon,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum MenuId {
+    Settings,
+    About,
+    Quit,
+}
+
+impl MenuId {
+    fn as_str(&self) -> &'static str {
+        match self {
+            MenuId::Settings => "settings",
+            MenuId::About => "about",
+            MenuId::Quit => "quit",
+        }
+    }
+}
+
 pub enum EventType {
     Settings,
     About,
@@ -44,12 +61,12 @@ impl Tray {
             }
         }).detach();
 
-        let icon = load_icon();
+        let icon = Self::load_icon();
         let menu = Menu::new();
 
-        let settings_action = MenuItem::with_id("settings", "Settings", true, None);
-        let about_action = MenuItem::with_id("about", "About Fast Forward", true, None);
-        let quit_action = MenuItem::with_id("quite", "Quit...", true, None);
+        let settings_action = MenuItem::with_id(MenuId::Settings.as_str(), "Settings", true, None);
+        let about_action = MenuItem::with_id(MenuId::About.as_str(), "About Fast Forward", true, None);
+        let quit_action = MenuItem::with_id(MenuId::Quit.as_str(), "Quit...", true, None);
 
         let _ = menu.append_items(&[
             &settings_action,
@@ -65,9 +82,9 @@ impl Tray {
 
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
             match event.id.0.as_str() {
-                "settings" => tx.send(EventType::Settings).expect("Failed to forward Settings event"),
-                "about" => tx.send(EventType::About).expect("Failed to forward Settings event"),
-                "quit" => tx.send(EventType::Quit).expect("Failed to forward Settings event"),
+                id if id == MenuId::Settings.as_str() => tx.send(EventType::Settings).expect("Failed to forward Settings event"),
+                id if id == MenuId::About.as_str() => tx.send(EventType::About).expect("Failed to forward About event"),
+                id if id == MenuId::Quit.as_str() => tx.send(EventType::Quit).expect("Failed to forward Quit event"),
                 _ => {}
             }
         }));
@@ -76,19 +93,21 @@ impl Tray {
             _tray: tray,
         });
     }
+
+
+    fn load_icon() -> tray_icon::Icon {
+        let (icon_rgba, icon_width, icon_height) = {
+            let icon_bytes = include_bytes!("../assets/tray_icon.png");
+            let image = image::load_from_memory(icon_bytes)
+                .expect("Failed to open icon path")
+                .into_rgba8();
+            let (width, height) = image.dimensions();
+            let rgba = image.into_raw();
+            (rgba, width, height)
+        };
+        tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+    }
+
 }
 
 impl Global for Tray {}
-
-fn load_icon() -> tray_icon::Icon {
-    let (icon_rgba, icon_width, icon_height) = {
-        let icon_bytes = include_bytes!("../assets/tray_icon.png");
-        let image = image::load_from_memory(icon_bytes)
-            .expect("Failed to open icon path")
-            .into_rgba8();
-        let (width, height) = image.dimensions();
-        let rgba = image.into_raw();
-        (rgba, width, height)
-    };
-    tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
-}
