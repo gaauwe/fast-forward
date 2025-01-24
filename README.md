@@ -14,8 +14,9 @@
 
 ## How It Works
 
-1. Press the right Command key to activate the window switcher
-2. Either:
-   - Press Tab to cycle through open windows, or
-   - Start typing to fuzzy search for your desired application
-3. Release to switch to the selected window
+1. Press the right Command key to trigger Fast Forward.
+2. You can:
+   - Type to search for the app you want.
+   - Use Tab to highlight the next app in the list.
+4. Release the Command key to switch to the selected app.
+   - To hide or close the selected app, press Space or Escape instead of releasing the Command key.
