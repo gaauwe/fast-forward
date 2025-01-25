@@ -3,7 +3,7 @@
 # Exit on any error
 set -e
 
-echo "🚀 Starting FastForward build process..."
+echo "🚀 Starting Fast Forward build process..."
 
 echo "📦 Checking required tools..."
 if ! command -v create-dmg &> /dev/null; then
@@ -30,12 +30,12 @@ cargo build --release
 
 echo "📦 Creating app bundle..."
 # Create the bundle directory structure
-BUNDLE_DIR="target/release/bundle/osx/FastForward.app"
+BUNDLE_DIR="target/release/bundle/osx/Fast Forward.app"
 mkdir -p "${BUNDLE_DIR}/Contents/MacOS"
 mkdir -p "${BUNDLE_DIR}/Contents/Resources"
 
 # Copy the binary
-cp target/release/fast-forward "${BUNDLE_DIR}/Contents/MacOS/FastForward"
+cp target/release/fast-forward "${BUNDLE_DIR}/Contents/MacOS/Fast Forward"
 
 # Copy the icon
 cp assets/icon.icns "${BUNDLE_DIR}/Contents/Resources/"
@@ -49,7 +49,7 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
     <key>CFBundleExecutable</key>
-    <string>FastForward</string>
+    <string>Fast Forward</string>
     <key>CFBundleIconFile</key>
     <string>icon</string>
     <key>CFBundleIdentifier</key>
@@ -57,7 +57,7 @@ cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>FastForward</string>
+    <string>Fast Forward</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -79,7 +79,7 @@ echo "🔐 Signing the application..."
 xattr -cr "${BUNDLE_DIR}"
 
 # Sign the binary
-codesign --force --deep --sign - "${BUNDLE_DIR}/Contents/MacOS/FastForward"
+codesign --force --deep --sign - "${BUNDLE_DIR}/Contents/MacOS/Fast Forward"
 
 # Sign the app bundle
 codesign --force --deep --sign - "${BUNDLE_DIR}"
@@ -93,13 +93,13 @@ if [ ! -d "${BUNDLE_DIR}" ]; then
 fi
 
 create-dmg \
-    --volname "FastForward" \
+    --volname "Fast Forward" \
     --volicon "assets/icon.icns" \
     --window-pos 200 120 \
     --window-size 600 400 \
     --icon-size 100 \
-    --icon "FastForward.app" 175 120 \
-    --hide-extension "FastForward.app" \
+    --icon "Fast Forward.app" 175 120 \
+    --hide-extension "Fast Forward.app" \
     --app-drop-link 425 120 \
     "FastForward.dmg" \
     "${BUNDLE_DIR}/"

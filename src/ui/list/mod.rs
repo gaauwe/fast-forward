@@ -5,7 +5,8 @@ use prelude::FluentBuilder;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
-use crate::{applications::{Applications, App}, theme::Theme};
+use crate::{applications::Applications, theme::Theme};
+use crate::socket_message::App;
 use super::{icon::{Icon, IconName}, input::SearchQuery};
 
 pub struct List {
@@ -81,7 +82,7 @@ impl Render for List {
 
                     range.map(|i| {
                         let name = list[i].name.to_string();
-                        let icon = list[i].icon.clone();
+                        let icon = list[i].icon.to_string();
 
                         div()
                             .id(i)

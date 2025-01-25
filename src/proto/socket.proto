@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+message App {
+    string name = 1;
+    int32 pid = 2;
+    string icon = 3;
+    bool active = 4;
+}
+
+message SocketMessage {
+    oneof event {
+        List list = 1;
+        Launch launch = 2;
+        Close close = 3;
+        Activate activate = 4;
+    }
+}
+
+message List {
+    repeated App apps = 1;
+}
+
+message Launch {
+    App app = 1;
+}
+
+message Close {
+    App app = 1;
+}
+
+message Activate {
+    App app = 1;
+}

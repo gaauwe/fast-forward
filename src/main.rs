@@ -7,6 +7,10 @@ mod tray;
 mod ui;
 mod window;
 
+mod socket_message {
+    include!(concat!(env!("OUT_DIR"), "/_.rs"));
+}
+
 use std::fs;
 use std::path::PathBuf;
 

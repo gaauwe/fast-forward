@@ -1,27 +1,9 @@
 use gpui::*;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
-use std::path::PathBuf;
 
 use crate::window::Window;
-
-pub struct App {
-    pub pid: isize,
-    pub name: String,
-    pub icon: PathBuf,
-    pub active: bool,
-}
-
-impl Clone for App {
-    fn clone(&self) -> Self {
-        Self {
-            pid: self.pid,
-            name: self.name.clone(),
-            icon: self.icon.clone(),
-            active: self.active
-        }
-    }
-}
+use crate::socket_message::App;
 
 pub struct Applications {
     pub list: Vec<App>,

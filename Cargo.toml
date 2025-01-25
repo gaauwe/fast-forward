@@ -27,6 +27,8 @@ macos-accessibility-client = "0.0.1"
 mouse_position = "0.1.4"
 objc2 = "0.6.0"
 objc2-app-kit = "0.3.0"
+prost = "0.13.4"
+prost-types = "0.13.4"
 serde = "1.0.217"
 serde_json = "1.0.137"
 swift-rs = "1.0.6"
@@ -37,4 +39,4 @@ tray-icon = "0.19.2"
 unicode-segmentation = "1.12.0"
 
 [build-dependencies]
-swift-rs = { version = "1.0.6", features = ["build"] }
+prost-build = "0.13.4"

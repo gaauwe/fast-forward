@@ -26,6 +26,8 @@ jobs:
         run: |
           brew install create-dmg
           brew install yq
+          brew install protobuf
+          brew install swift-protobuf
 
       - name: Get Version
         id: get_version

@@ -1,19 +1,18 @@
 use std::process::Command;
-use std::path::Path;
 
 fn main() {
-    std::fs::create_dir_all("./.build").expect("Failed to create build directory");
-    let swift_binary = Path::new("./.build").join("fast-forward-monitor");
-
-    // Compile Swift code
-    let status = Command::new("swiftc")
-        .arg("./swift-lib/lib.swift")
-        .arg("-o")
-        .arg(&swift_binary)
+    let status = Command::new("swift")
+        .arg("build")
+        .arg("--package-path")
+        .arg("./swift-lib")
+        .arg("--configuration")
+        .arg("release")
         .status()
-        .expect("Failed to compile Swift code");
+        .expect("Failed to build Swift package");
 
     if !status.success() {
-        panic!("Failed to compile Swift code");
+        panic!("Failed to build Swift package");
     }
+
+    prost_build::compile_protos(&["src/proto/socket.proto"], &["src/proto"]).unwrap();
 }

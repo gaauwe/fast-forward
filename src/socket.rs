@@ -5,53 +5,49 @@ use gpui::AppContext;
 use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::watch;
-use serde_json;
 use tokio::process::{Child, Command};
 use anyhow::Context;
 use std::io::prelude::*;
+use prost::Message;
 
-use crate::applications::{App, Applications, IndexType};
+use crate::applications::{Applications, IndexType};
+use crate::socket_message::{SocketMessage, socket_message::Event};
 
-const SWIFT_BINARY: &[u8] = include_bytes!("../.build/fast-forward-monitor");
+const SWIFT_BINARY: &[u8] = include_bytes!("../swift-lib/.build/release/swift-lib");
 
 pub struct Socket {
     stream: UnixStream,
     swift_monitor: Child,
-    tx: watch::Sender<SocketEvent>,
-}
-
-pub enum SocketEvent {
-    List(Vec<App>),
-    Launch(App),
-    Close(App),
-    Activate(App),
-    None
 }
 
 impl Socket {
     pub fn new(cx: &mut AppContext) {
-        let (tx, mut rx) = watch::channel(SocketEvent::None);
+        let (tx, mut rx) = watch::channel(SocketMessage::default());
         cx.spawn(|cx| async move {
             while rx.changed().await.is_ok() {
-                match *rx.borrow() {
-                    SocketEvent::List(ref list) => {
-                        let _ = cx.update(|cx| {
-                            Applications::update_list(cx, list.clone());
-                        });
-                    }
-                    SocketEvent::Launch(ref app) | SocketEvent::Activate(ref app) => {
-                        let _ = cx.update(|cx| {
-                            Applications::update_list_entry(cx, Some(app), Some(IndexType::Start));
-                        });
-                    }
-                    SocketEvent::Close(ref app) => {
-                        let _ = cx.update(|cx| {
-                            Applications::update_list_entry(cx, Some(app), None);
-                        });
-                    },
-                    SocketEvent::None => {
-                        println!("Unknown event received")
-                    },
+                if let Some(event) = &rx.borrow().event {
+                    match event {
+                        Event::List(ref event) => {
+                            let _ = cx.update(|cx| {
+                                Applications::update_list(cx, event.apps.clone());
+                            });
+                        }
+                        Event::Launch(ref event) => {
+                            let _ = cx.update(|cx| {
+                                Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start));
+                            });
+                        }
+                        Event::Close(ref event) => {
+                            let _ = cx.update(|cx| {
+                                Applications::update_list_entry(cx, event.app.as_ref(), None);
+                            });
+                        }
+                        Event::Activate(ref event) => {
+                            let _ = cx.update(|cx| {
+                                Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start));
+                            });
+                        }
+                    };
                 }
             }
         }).detach();
@@ -59,7 +55,7 @@ impl Socket {
         Self::listen_for_unix_socket_events(tx);
     }
 
-    fn listen_for_unix_socket_events(tx: watch::Sender<SocketEvent>) {
+    fn listen_for_unix_socket_events(tx: watch::Sender<SocketMessage>) {
         tokio::spawn(async move {
             let socket_path = "/tmp/swift_monitor.sock";
             let mut swift_monitor = match Self::run_swift_monitor().await {
@@ -81,7 +77,6 @@ impl Socket {
             let mut connection = Socket {
                 stream,
                 swift_monitor,
-                tx,
             };
 
             loop {
@@ -93,8 +88,9 @@ impl Socket {
                                 break;
                             }
                             Ok(bytes_read) => {
-                                let message = Self::parse_message(bytes_read, &buffer);
-                                connection.handle_message(message);
+                                let message = SocketMessage::decode(&buffer[..bytes_read]).unwrap();
+                                println!("Received message: {:?}", message);
+                                tx.send(message).expect("Failed to send event");
                             }
                             Err(e) => {
                                 eprintln!("Error while reading data from the socket: {}", e);
@@ -105,72 +101,6 @@ impl Socket {
                 }
             }
         });
-    }
-
-    // TODO: Refactor with protobuf
-    fn handle_message(&mut self, message: serde_json::Value) {
-        if let Some(message_type) = message["type"].as_str() {
-            match message_type {
-                "list" => {
-                    if let Some(list) = message["list"].as_array() {
-                        let mut apps = Vec::new();
-                        for app in list {
-                            if let Some(name) = app["name"].as_str() {
-                                let pid = app["pid"].as_i64().unwrap_or(0) as isize;
-                                let active = app["active"].as_bool().unwrap_or(false);
-                                let icon = app["icon"].as_str().unwrap_or("").into();
-                                apps.push(App {
-                                    name: name.into(),
-                                    pid,
-                                    active,
-                                    icon,
-                                });
-                            }
-                        }
-                        let event = SocketEvent::List(apps);
-                        self.tx.send(event).expect("Failed to send event");
-                    } else {
-                        eprintln!("List field is missing or not an array");
-                    }
-                },
-                "launch" | "close" | "activate" => {
-                    if let Some(app_info) = message["app"].as_object() {
-                        let name = app_info["name"].as_str().unwrap_or("").to_string();
-                        let pid = app_info["pid"].as_i64().unwrap_or(0) as isize;
-                        let active = app_info["active"].as_bool().unwrap_or(false);
-                        let icon = app_info["icon"].as_str().unwrap_or("").into();
-                        let app = App {
-                            name,
-                            pid,
-                            active,
-                            icon,
-                        };
-                        let event = match message_type {
-                            "launch" => SocketEvent::Launch(app),
-                            "close" => SocketEvent::Close(app),
-                            "activate" => SocketEvent::Activate(app),
-                            _ => SocketEvent::None,
-                        };
-                        self.tx.send(event).expect("Failed to send event");
-                    } else {
-                        eprintln!("App field is missing or not an object");
-                    }
-                },
-                _ => {}
-            }
-        } else {
-            eprintln!("Message does not contain a type field");
-        }
-    }
-
-    fn parse_message(bytes_read: usize, buffer: &Vec<u8>) -> serde_json::Value {
-        let message = String::from_utf8_lossy(&buffer[..bytes_read]);
-        let parsed_message: serde_json::Value = serde_json::from_str(&message).unwrap_or_else(|_| {
-            eprintln!("Failed to parse message as JSON");
-            serde_json::Value::Null
-        });
-
-        parsed_message
     }
 
     async fn wait_for_message(child: &mut Child, message: &str) -> std::io::Result<()> {
