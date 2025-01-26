@@ -32,13 +32,15 @@ echo "📦 Creating app bundle..."
 # Create the bundle directory structure
 BUNDLE_DIR="target/release/bundle/osx/Fast Forward.app"
 mkdir -p "${BUNDLE_DIR}/Contents/MacOS"
+mkdir -p "${BUNDLE_DIR}/Contents/MacOS/assets/icons"
 mkdir -p "${BUNDLE_DIR}/Contents/Resources"
 
 # Copy the binary
 cp target/release/fast-forward "${BUNDLE_DIR}/Contents/MacOS/Fast Forward"
 
-# Copy the icon
+# Copy the icons
 cp assets/icon.icns "${BUNDLE_DIR}/Contents/Resources/"
+cp assets/icons/* "${BUNDLE_DIR}/Contents/MacOS/assets/icons/"
 
 # Create Info.plist
 cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF

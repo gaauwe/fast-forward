@@ -5,6 +5,7 @@ message App {
     int32 pid = 2;
     string icon = 3;
     bool active = 4;
+    string path = 5;
 }
 
 message SocketMessage {

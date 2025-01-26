@@ -5,6 +5,8 @@ use crate::theme::Theme;
 #[derive(IntoElement)]
 pub(crate) struct Icon {
     name: IconName,
+    size: IconSize,
+    color: IconColor,
     transformation: Transformation,
 }
 
@@ -17,12 +19,25 @@ pub(crate) struct Icon {
 )]
 pub enum IconName {
     ArrowCircle,
+    ExternalLink
+}
+
+pub enum IconSize {
+    Small,
+    Default,
+}
+
+pub enum IconColor {
+    Default,
+    Muted,
 }
 
 impl Icon {
-    pub fn new(name: IconName) -> Self {
+    pub fn new(name: IconName, size: IconSize, color: IconColor) -> Self {
         Self {
             name,
+            size,
+            color,
             transformation: Transformation::default(),
         }
     }
@@ -34,7 +49,8 @@ impl Icon {
 
     pub fn path(&self) -> String {
         match self.name {
-            IconName::ArrowCircle => "arrow_circle.svg".to_string(),
+            IconName::ArrowCircle => "icons/arrow_circle.svg".to_string(),
+            IconName::ExternalLink => "icons/external_link.svg".to_string(),
         }
     }
 }
@@ -44,10 +60,20 @@ impl RenderOnce for Icon {
         let theme = cx.global::<Theme>();
         let path = self.path();
 
+        let color = match self.color {
+            IconColor::Default => theme.foreground,
+            IconColor::Muted => theme.muted_foreground,
+        };
+
+        let size = match self.size {
+            IconSize::Small => 16.0,
+            IconSize::Default => 20.0,
+        };
+
         svg()
             .path(path)
-            .size_5()
-            .text_color(theme.foreground)
+            .size(px(size))
+            .text_color(color)
             .with_transformation(self.transformation)
             .into_element()
     }

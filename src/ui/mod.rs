@@ -44,7 +44,7 @@ impl Container {
         let applications = cx.global::<Applications>();
         let query = cx.global::<SearchQuery>().value.as_str();
 
-        let list = self.list.read(cx).filter(query, applications.list.clone());
+        let list = List::filter(query, applications.list.clone());
         let max_items = list.len();
 
         if max_items > 0 && self.trusted {

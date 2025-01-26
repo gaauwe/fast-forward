@@ -19,6 +19,15 @@ func CGSCopyManagedDisplaySpaces(_ cid: CGSConnectionID) -> CFArray
 @_silgen_name("CGSMainConnectionID")
 func CGSMainConnectionID() -> CGSConnectionID
 
+struct AppProfile: Codable {
+    let _name: String
+    let path: String
+}
+
+struct AppProperty: Codable {
+    let _items: [AppProfile]
+}
+
 class AppLifecycleMonitor: @unchecked Sendable {
     private let socketPath = "/tmp/swift_monitor.sock"
     private var socketFileDescriptor: Int32 = -1
@@ -94,7 +103,15 @@ class AppLifecycleMonitor: @unchecked Sendable {
                 self.log("Client connected, clientSocket: \(clientSocket)")
 
                 // Send the initial application list when a client connects
-                let apps = getApplicationWindows()
+                let running_apps = getApplicationWindows()
+                let installed_apps = getInstalledApplications()
+                let filtered_installed_apps = installed_apps.filter { installed_app in
+                    !running_apps.contains { running_app in
+                        running_app.path == installed_app.path
+                    }
+                }
+                let apps = running_apps + filtered_installed_apps
+
                 let message = SocketMessage(event: List(apps: apps))
                 sendMessageToClient(message)
             } else {
@@ -107,19 +124,52 @@ class AppLifecycleMonitor: @unchecked Sendable {
 
     private func sendMessageToClient(_ message: SocketMessage) {
         do {
-            self.log("Sending message: \(message)")
             let data = try message.serializedData()
+
+            // Prefix the message with its length
+            var length = UInt32(data.count).bigEndian
+            let lengthData = Data(bytes: &length, count: MemoryLayout<UInt32>.size)
+
+            // Combine length and message data
+            var combinedData = lengthData
+            combinedData.append(data)
+            self.log("Sending message with length: \(data.count)")
 
             socketQueue.async { [weak self] in
                 guard let self = self else { return }
 
                 // Check if there is a valid client socket
                 if self.clientSocket >= 0 {
-                    // Send data to the client
-                    let sentBytes = data.withUnsafeBytes {
-                        send(self.clientSocket, $0.baseAddress, $0.count, 0)
+                    var totalBytesSent = 0
+                    while totalBytesSent < combinedData.count {
+                        let bytesLeft = combinedData.count - totalBytesSent
+                        let sentBytes = combinedData.withUnsafeBytes {
+                            send(
+                                self.clientSocket, $0.baseAddress!.advanced(by: totalBytesSent),
+                                bytesLeft, 0)
+                        }
+                        if sentBytes < 0 {
+                            let errorString = String(cString: strerror(errno))
+                            if errno == EAGAIN || errno == EWOULDBLOCK {
+                                self.log("Send buffer full, retrying...")
+                                usleep(100_000)  // Sleep for 100 milliseconds
+                                continue
+                            } else {
+                                self.log(
+                                    "Failed to send data, sentBytes: \(sentBytes), error: \(errorString)"
+                                )
+                                break
+                            }
+                        }
+                        totalBytesSent += sentBytes
+                        self.log("Sent \(sentBytes) bytes, total sent: \(totalBytesSent) bytes.")
                     }
-                    self.log("Sent \(sentBytes) bytes.")
+
+                    if totalBytesSent == combinedData.count {
+                        self.log("All bytes sent successfully.")
+                    } else {
+                        self.log("Warning: Not all bytes were sent.")
+                    }
                 } else {
                     self.log("No client connected, cannot send message.")
                 }
@@ -159,6 +209,37 @@ class AppLifecycleMonitor: @unchecked Sendable {
 
         // Start the run loop to keep the application running
         RunLoop.main.run()
+    }
+
+    func getInstalledApplications() -> [App] {
+        let task = Process()
+        let pipe = Pipe()
+
+        task.launchPath = "/usr/sbin/system_profiler"
+        task.arguments = ["-xml", "-detailLevel", "mini", "SPApplicationsDataType"]
+        task.standardOutput = pipe
+        task.launch()
+
+        // parse the plist data
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let decoder = try? PropertyListDecoder().decode([AppProperty].self, from: data),
+            var apps = decoder.first?._items
+        {
+            let new_apps =
+                apps
+                .filter({
+                    $0.path.hasPrefix("/Applications/")
+                        || $0.path.hasPrefix("/System/Applications/")
+                })
+                .map {
+                    let icon = NSWorkspace.shared.icon(forFile: $0.path)
+                    let path = saveIconToFile(icon: icon, name: $0._name) ?? ""
+                    return App(name: $0._name, pid: 0, icon: path, active: false, path: $0.path)
+                }
+            return new_apps
+
+        }
+        return []
     }
 
     func getApplicationWindows() -> [App] {
@@ -232,7 +313,8 @@ class AppLifecycleMonitor: @unchecked Sendable {
             name: name,
             pid: Int32(app.processIdentifier),
             icon: saveIconToFile(icon: app.icon, name: name) ?? "",
-            active: app.isActive
+            active: app.isActive,
+            path: app.bundleURL?.path ?? ""
         )
     }
 
@@ -321,11 +403,12 @@ extension NSImage {
 
 // MARK: - Protobuf Extensions
 extension App {
-    init(name: String, pid: Int32, icon: String, active: Bool) {
+    init(name: String, pid: Int32, icon: String, active: Bool, path: String) {
         self.name = name
         self.pid = pid
         self.icon = icon
         self.active = active
+        self.path = path
     }
 }
 

@@ -1,9 +1,13 @@
+use std::process::Command;
+
 use gpui::*;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
 
+use crate::ui::input::SearchQuery;
 use crate::window::Window;
 use crate::socket_message::App;
+use crate::ui::list::List;
 
 pub struct Applications {
     pub list: Vec<App>,
@@ -37,10 +41,13 @@ impl Applications {
     }
 
     pub fn update_active_index(cx: &mut AppContext, index_type: IndexType) {
+        let query = cx.global::<SearchQuery>();
         let applications = cx.global::<Applications>();
-        let mut applications = applications.clone();
 
-        applications.index = Self::get_index_from_type(&applications.list, applications.index, index_type);
+        let mut applications = applications.clone();
+        let list = List::filter(&query.value, applications.list.clone());
+
+        applications.index = Self::get_index_from_type(&list, applications.index, index_type);
         cx.set_global(applications);
     }
 
@@ -104,6 +111,16 @@ impl Applications {
                         }
                     }
                 }
+            }
+
+            // Handle events for non-running applications.
+            match action_type {
+                ActionType::Activate => {
+                    Self::update_list_entry(cx, Some(app), Some(IndexType::Start));
+
+                    let _ = Command::new("open").arg(app.path.as_str()).status();
+                },
+                _ => {}
             }
         }
     }

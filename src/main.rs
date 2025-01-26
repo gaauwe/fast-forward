@@ -32,7 +32,11 @@ use gpui::*;
 async fn main() {
     App::new()
         .with_assets(Assets {
-            base: PathBuf::from("assets"),
+            base: if cfg!(debug_assertions) {
+                PathBuf::from("assets")
+            } else {
+                std::env::current_exe().unwrap().parent().unwrap().join("assets")
+            },
         })
         .run(|cx: &mut AppContext| {
         // Start the application in accessory mode, which means it won't appear in the dock.

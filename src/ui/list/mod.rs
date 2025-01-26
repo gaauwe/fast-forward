@@ -7,33 +7,64 @@ use fuzzy_matcher::FuzzyMatcher;
 
 use crate::{applications::Applications, theme::Theme};
 use crate::socket_message::App;
+use super::icon::{IconColor, IconSize};
 use super::{icon::{Icon, IconName}, input::SearchQuery};
 
 pub struct List {
-    matcher: SkimMatcherV2,
     pub items: Vec<App>,
 }
 
 impl List {
     pub fn new(cx: &AppContext) -> Self {
-        let matcher = SkimMatcherV2::default();
         let applications = cx.global::<Applications>();
 
         Self {
-            matcher,
             items: applications.list.clone()
         }
     }
 
-    pub fn filter(&self, query: &str, mut list: Vec<App>) -> Vec<App> {
-        list.retain(|item| {
-            self.matcher.fuzzy_match(&item.name, query).is_some()
-        });
+    pub fn filter(query: &str, mut list: Vec<App>) -> Vec<App> {
+        let matcher = SkimMatcherV2::default();
+
+        if query.is_empty() {
+            list.retain(|item| item.pid != 0);
+        } else {
+            list.retain(|item| {
+                matcher.fuzzy_match(&item.name, query).is_some()
+            });
+
+            list.sort_by(|a, b| {
+                let score_a = matcher.fuzzy_match(&a.name, query).unwrap_or(0);
+                let score_b = matcher.fuzzy_match(&b.name, query).unwrap_or(0);
+                score_b.cmp(&score_a)
+            });
+        }
 
         list.sort_by(|a, b| {
-            let score_a = self.matcher.fuzzy_match(&a.name, query).unwrap_or(0);
-            let score_b = self.matcher.fuzzy_match(&b.name, query).unwrap_or(0);
-            score_b.cmp(&score_a)
+            if a.pid != 0 && b.pid == 0 {
+                std::cmp::Ordering::Less
+            } else if a.pid == 0 && b.pid != 0 {
+                std::cmp::Ordering::Greater
+            } else if a.pid == 0 && b.pid == 0 {
+                match (a.path.starts_with("/Applications/"), b.path.starts_with("/Applications/")) {
+                    (true, false) => std::cmp::Ordering::Less,
+                    (false, true) => std::cmp::Ordering::Greater,
+                    _ => std::cmp::Ordering::Equal,
+                }
+            } else {
+                std::cmp::Ordering::Equal
+            }
+        });
+
+        // Limit the list to only have max 3 items with no pid
+        let mut no_pid_count = 0;
+        list.retain(|item| {
+            if item.pid == 0 {
+                no_pid_count += 1;
+                no_pid_count <= 3
+            } else {
+                true
+            }
         });
 
         list
@@ -63,7 +94,7 @@ impl Render for List {
         if loading {
             return self.render_empty_state(
                 theme,
-                Icon::new(IconName::ArrowCircle).with_animation(
+                Icon::new(IconName::ArrowCircle, IconSize::Default, IconColor::Default).with_animation(
                     "arrow-circle",
                     Animation::new(Duration::from_secs(2)).repeat(),
                     |icon, delta| icon.transform(Transformation::rotate(percentage(delta))),
@@ -72,7 +103,7 @@ impl Render for List {
         }
 
         // Update the list with the filtered applications.
-        self.items = self.filter(query, applications.list.clone());
+        self.items = Self::filter(query, applications.list.clone());
 
         if self.items.len() > 0 {
             div().child(uniform_list(cx.view().clone(), "entries", self.items.len(), {
@@ -83,6 +114,7 @@ impl Render for List {
                     range.map(|i| {
                         let name = list[i].name.to_string();
                         let icon = list[i].icon.to_string();
+                        let pid = list[i].pid;
 
                         div()
                             .id(i)
@@ -98,7 +130,9 @@ impl Render for List {
                             .text_color(theme.foreground)
                             .when(i == index, |cx| cx.bg(theme.muted))
                             .child(img(icon).h(px(32.0)).w(px(32.0)))
-                            .child(div().child(name))
+                            .child(div().child(name).flex_1())
+                            .when(pid == 0, |cx| cx.child(div().mr_0p5().child(Icon::new(IconName::ExternalLink, IconSize::Small, IconColor::Muted))))
+                            .when(pid == 0, |cx| cx.opacity(0.6))
                     }).collect::<Vec<_>>()
                 }
             }).h_full()).h_full()

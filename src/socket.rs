@@ -73,30 +73,39 @@ impl Socket {
                 }
             };
 
-            let mut buffer = vec![0u8; 4096];
             let mut connection = Socket {
                 stream,
                 swift_monitor,
             };
 
+            let mut length_buffer = [0u8; 4];
+
             loop {
-                tokio::select! {
-                    result = connection.stream.read(&mut buffer) => {
-                        match result {
-                            Ok(0) => {
-                                println!("No more data received.");
-                                break;
-                            }
-                            Ok(bytes_read) => {
-                                let message = SocketMessage::decode(&buffer[..bytes_read]).unwrap();
-                                println!("Received message: {:?}", message);
-                                tx.send(message).expect("Failed to send event");
+                match connection.stream.read_exact(&mut length_buffer).await {
+                    Ok(_) => {
+                        let message_length = u32::from_be_bytes(length_buffer) as usize;
+                        let mut message_buffer = vec![0u8; message_length];
+
+                        match connection.stream.read_exact(&mut message_buffer).await {
+                            Ok(_) => {
+                                match SocketMessage::decode(&*message_buffer) {
+                                    Ok(message) => {
+                                        tx.send(message).expect("Failed to send event");
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to decode message: {}", e);
+                                    }
+                                }
                             }
                             Err(e) => {
-                                eprintln!("Error while reading data from the socket: {}", e);
+                                eprintln!("Error while reading message from the socket: {}", e);
                                 break;
                             }
                         }
+                    }
+                    Err(e) => {
+                        eprintln!("Error while reading length from the socket: {}", e);
+                        break;
                     }
                 }
             }
