@@ -10,8 +10,8 @@ use macos_accessibility_client::accessibility::application_is_trusted_with_promp
 use crate::{applications::Applications, theme::Theme, ui::list::List};
 
 pub struct Container {
-    pub input: View<TextInput>,
-    pub list: View<List>,
+    pub input: Entity<TextInput>,
+    pub list: Entity<List>,
     pub trusted: bool
 }
 
@@ -21,16 +21,16 @@ pub static ACTION_BAR_HEIGHT: f32 = 36.;
 pub static EMPTY_PLACEHOLDER_HEIGHT: f32 = 100.;
 
 impl Container {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
-        let input = cx.new_view(|cx| TextInput::new(cx));
-        let list = cx.new_view(|cx| List::new(cx));
+    pub fn new(window: &mut Window, cx: &mut App) -> Self {
+        let input = cx.new(|cx| TextInput::new(window, cx));
+        let list = cx.new(|cx| List::new(cx));
 
         let trusted = application_is_trusted_with_prompt();
 
         Self { input, list, trusted }
     }
 
-    fn update_accessibility_permission(&mut self, _: &ClickEvent, cx: &mut ViewContext<Self>) {
+    fn update_accessibility_permission(&mut self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if application_is_trusted_with_prompt() {
             if let Ok(current_exe) = std::env::current_exe() {
                 cx.restart(Some(current_exe));
@@ -40,7 +40,7 @@ impl Container {
         }
     }
 
-    pub fn get_height(&self, cx: &AppContext) -> f32 {
+    pub fn get_height(&self, cx: &App) -> f32 {
         let applications = cx.global::<Applications>();
         let query = cx.global::<SearchQuery>().value.as_str();
 
@@ -58,7 +58,7 @@ impl Container {
     fn render_accessibility_prompt(
         &self,
         theme: &Theme,
-        listener: impl Fn(&ClickEvent, &mut WindowContext) + 'static
+        listener: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static
     ) -> impl IntoElement {
         div()
             .flex()
@@ -121,7 +121,7 @@ impl Container {
 }
 
 impl Render for Container {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
         let height = self.get_height(cx);
 

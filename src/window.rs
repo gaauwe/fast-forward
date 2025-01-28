@@ -10,7 +10,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         // Calculate the bounds of the active display.
         let display_id = Some(Self::get_active_display_id(cx));
         let bounds = cx.displays().iter().find(|d| Some(d.id()) == display_id).map(|d| d.bounds()).unwrap_or(Bounds {
@@ -42,16 +42,16 @@ impl Window {
                 display_id,
                 ..Default::default()
             },
-            |cx| {
-                cx.new_view(|cx| Container::new(cx))
+            |window, cx| {
+                cx.new(|cx| Container::new(window, cx))
             },
         )
         .unwrap();
 
         // Auto focus the input field.
         window
-            .update(cx, |view, cx| {
-                cx.focus_view(&view.input);
+            .update(cx, |view, window, cx| {
+                cx.focus_view(&view.input, window);
                 cx.activate(true);
             })
             .unwrap();
@@ -62,7 +62,7 @@ impl Window {
         });
     }
 
-    pub fn show(cx: &mut AppContext) {
+    pub fn show(cx: &mut App) {
         let display_id = cx.global::<Self>().display_id;
         let active_display_id = Self::get_active_display_id(cx);
 
@@ -80,15 +80,15 @@ impl Window {
         }
 
         let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, cx| {
+        window.window.clone().update(cx, |_view, _window, cx| {
             cx.activate(true);
         }).ok();
     }
 
-    pub fn hide(cx: &mut AppContext) {
+    pub fn hide(cx: &mut App) {
         // Hide the window and reset the input field.
         let window = cx.global::<Window>();
-        window.window.clone().update(cx, |view, cx| {
+        window.window.clone().update(cx, |view, _window, cx| {
             cx.hide();
 
 
@@ -110,14 +110,14 @@ impl Window {
         Applications::update_active_index(cx, IndexType::Start);
     }
 
-    pub fn close(cx: &mut AppContext) {
+    pub fn close(cx: &mut App) {
         let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, cx| {
-            cx.remove_window();
+        window.window.clone().update(cx, |_view, window, _cx| {
+            window.remove_window();
         }).ok();
     }
 
-    fn get_active_display_id(cx: &mut AppContext) -> DisplayId {
+    fn get_active_display_id(cx: &mut App) -> DisplayId {
         let mouse_location = Mouse::get_mouse_position();
         let gpui_displays = cx.displays();
         let fallback_display_id = gpui_displays.first().unwrap().id();

@@ -34,7 +34,7 @@ pub enum TrayEvent {
 }
 
 impl Commander {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let (tx, mut rx) = watch::channel(EventType::None);
         cx.spawn(|cx| async move {
             loop {

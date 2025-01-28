@@ -33,7 +33,7 @@ use gpui::*;
 
 #[tokio::main]
 async fn main() {
-    App::new()
+    Application::new()
         .with_assets(Assets {
             base: if cfg!(debug_assertions) {
                 PathBuf::from("assets")
@@ -41,7 +41,7 @@ async fn main() {
                 std::env::current_exe().unwrap().parent().unwrap().join("assets")
             },
         })
-        .run(|cx: &mut AppContext| {
+        .run(|cx: &mut App| {
         // Start the application in accessory mode, which means it won't appear in the dock.
         // - https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/accessory
         unsafe {

@@ -1,6 +1,6 @@
 use crate::theme::{Theme, ThemeConfig};
 use anyhow::{Context, Result};
-use gpui::{AppContext, Global};
+use gpui::{App, Global};
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let config = Config::load().unwrap_or_else(|err| {
             eprintln!("Failed to load configuration: {}", err);
             Config::default()

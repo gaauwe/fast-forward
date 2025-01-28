@@ -38,7 +38,7 @@ impl From<Color> for Hsla {
 }
 
 impl Theme {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let config = cx.global::<Config>();
         let theme = config.theme;
 

@@ -3,7 +3,7 @@ mod blink_cursor;
 use std::ops::Range;
 use blink_cursor::BlinkCursor;
 use gpui::{
-    actions, div, fill, point, prelude::*, px, relative, size, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, FocusHandle, FocusableView, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, Model, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, View, ViewContext, ViewInputHandler, WindowContext
+    actions, div, fill, point, prelude::*, px, relative, size, App, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window
 };
 use unicode_segmentation::*;
 
@@ -35,15 +35,15 @@ pub struct TextInput {
     marked_range: Option<Range<usize>>,
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
-    blink_cursor: Model<BlinkCursor>,
+    blink_cursor: Entity<BlinkCursor>,
 }
 
 // Mostly copied from the TextInput example in the gpui repository, with some modifications.
 // - https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 impl TextInput {
-    pub fn new(cx: &mut ViewContext<Self>) -> Self {
+    pub fn new( window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
-        let blink_cursor = cx.new_model(|_| BlinkCursor::new());
+        let blink_cursor = cx.new(|_| BlinkCursor::new());
 
         let input = Self {
             value: "".into(),
@@ -61,14 +61,14 @@ impl TextInput {
         cx.observe(&input.blink_cursor, |_, _, cx| cx.notify())
             .detach();
         // Blink the cursor when the window is active, pause when it's not.
-        cx.observe_window_activation(|input, cx| {
-            if cx.is_window_active() {
+        cx.observe_window_activation(window, |input, window, cx| {
+            if window.is_window_active() {
                 // TODO: This is a hack to clear the search query when the window is re-activated.
                 input.value = "".into();
                 input.selected_range = 0..0;
 
                 let focus_handle = input.focus_handle.clone();
-                if focus_handle.is_focused(cx) {
+                if focus_handle.is_focused(window) {
                     input.blink_cursor.update(cx, |blink_cursor, cx| {
                         blink_cursor.start(cx);
                     });
@@ -98,7 +98,7 @@ impl TextInput {
         input
     }
 
-    fn left(&mut self, _: &Left, cx: &mut ViewContext<Self>) {
+    fn left(&mut self, _: &Left, _window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), cx);
@@ -107,7 +107,7 @@ impl TextInput {
         }
     }
 
-    fn right(&mut self, _: &Right, cx: &mut ViewContext<Self>) {
+    fn right(&mut self, _: &Right, _window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.move_to(self.next_boundary(self.selected_range.end), cx);
@@ -116,25 +116,25 @@ impl TextInput {
         }
     }
 
-    fn tab(&mut self, _: &Tab, cx: &mut ViewContext<Self>) {
+    fn tab(&mut self, _: &Tab, _window: &mut Window, cx: &mut Context<Self>) {
         Applications::update_active_index(cx, IndexType::Next);
         cx.notify();
     }
 
-    fn shift_tab(&mut self, _: &ShiftTab, cx: &mut ViewContext<Self>) {
+    fn shift_tab(&mut self, _: &ShiftTab, _window: &mut Window, cx: &mut Context<Self>) {
         Applications::update_active_index(cx, IndexType::Previous);
         cx.notify();
     }
 
-    fn backspace(&mut self, _: &Backspace, cx: &mut ViewContext<Self>) {
+    fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
             self.select_to(self.previous_boundary(self.cursor_offset()), cx)
         }
-        self.replace_text_in_range(None, "", cx)
+        self.replace_text_in_range(None, "", window, cx)
     }
 
-    fn move_to(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
+    fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         self.selected_range = offset..offset;
         cx.notify()
@@ -148,21 +148,21 @@ impl TextInput {
         }
     }
 
-    fn pause_blink_cursor(&mut self, cx: &mut ViewContext<Self>) {
+    fn pause_blink_cursor(&mut self, cx: &mut Context<Self>) {
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.pause(cx);
         });
     }
 
-    fn on_key_down_for_blink_cursor(&mut self, _: &KeyDownEvent, cx: &mut ViewContext<Self>) {
+    fn on_key_down_for_blink_cursor(&mut self, _: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx)
     }
 
-    pub(crate) fn show_cursor(&self, cx: &WindowContext) -> bool {
-        self.focus_handle.is_focused(cx) && self.blink_cursor.read(cx).visible()
+    pub(crate) fn show_cursor(&self, window: &mut Window, cx: &App) -> bool {
+        self.focus_handle.is_focused(window) && self.blink_cursor.read(cx).visible()
     }
 
-    fn select_to(&mut self, offset: usize, cx: &mut ViewContext<Self>) {
+    fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         if self.selection_reversed {
             self.selected_range.start = offset
         } else {
@@ -229,12 +229,13 @@ impl TextInput {
     }
 }
 
-impl ViewInputHandler for TextInput {
+impl EntityInputHandler for TextInput {
     fn text_for_range(
         &mut self,
         range_utf16: Range<usize>,
         actual_range: &mut Option<Range<usize>>,
-        _cx: &mut ViewContext<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) -> Option<String> {
         let range = self.range_from_utf16(&range_utf16);
         actual_range.replace(self.range_to_utf16(&range));
@@ -244,7 +245,8 @@ impl ViewInputHandler for TextInput {
     fn selected_text_range(
         &mut self,
         _ignore_disabled_input: bool,
-        _cx: &mut ViewContext<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
         Some(UTF16Selection {
             range: self.range_to_utf16(&self.selected_range),
@@ -252,13 +254,13 @@ impl ViewInputHandler for TextInput {
         })
     }
 
-    fn marked_text_range(&self, _cx: &mut ViewContext<Self>) -> Option<Range<usize>> {
+    fn marked_text_range(&self, _window: &mut Window, _cx: &mut Context<Self>) -> Option<Range<usize>> {
         self.marked_range
             .as_ref()
             .map(|range| self.range_to_utf16(range))
     }
 
-    fn unmark_text(&mut self, _cx: &mut ViewContext<Self>) {
+    fn unmark_text(&mut self, _window: &mut Window, _cx: &mut Context<Self>) {
         self.marked_range = None;
     }
 
@@ -266,7 +268,8 @@ impl ViewInputHandler for TextInput {
         &mut self,
         range_utf16: Option<Range<usize>>,
         new_text: &str,
-        cx: &mut ViewContext<Self>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         let range = range_utf16
             .as_ref()
@@ -294,7 +297,8 @@ impl ViewInputHandler for TextInput {
         range_utf16: Option<Range<usize>>,
         new_text: &str,
         new_selected_range_utf16: Option<Range<usize>>,
-        cx: &mut ViewContext<Self>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
     ) {
         let range = range_utf16
             .as_ref()
@@ -319,7 +323,8 @@ impl ViewInputHandler for TextInput {
         &mut self,
         range_utf16: Range<usize>,
         bounds: Bounds<Pixels>,
-        _cx: &mut ViewContext<Self>,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
         let last_layout = self.last_layout.as_ref()?;
         let range = self.range_from_utf16(&range_utf16);
@@ -339,7 +344,7 @@ impl ViewInputHandler for TextInput {
 impl Global for TextInput {}
 
 struct TextElement {
-    input: View<TextInput>,
+    input: Entity<TextInput>,
 }
 
 struct PrepaintState {
@@ -367,12 +372,13 @@ impl Element for TextElement {
     fn request_layout(
         &mut self,
         _id: Option<&GlobalElementId>,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.size.width = relative(1.).into();
-        style.size.height = cx.line_height().into();
-        (cx.request_layout(style, []), ())
+        style.size.height = window.line_height().into();
+        (window.request_layout(style, [], cx), ())
     }
 
     fn prepaint(
@@ -380,14 +386,15 @@ impl Element for TextElement {
         _id: Option<&GlobalElementId>,
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut App,
     ) -> Self::PrepaintState {
         let theme = cx.global::<Theme>();
         let input = self.input.read(cx);
         let value = input.value.clone();
         let selected_range = input.selected_range.clone();
         let cursor = input.cursor_offset();
-        let style = cx.text_style();
+        let style = window.text_style();
 
         let (display_text, text_color) = if value.is_empty() {
             (input.placeholder.clone(), theme.muted_foreground)
@@ -430,14 +437,14 @@ impl Element for TextElement {
             vec![run]
         };
 
-        let font_size = style.font_size.to_pixels(cx.rem_size());
-        let line = cx
+        let font_size = style.font_size.to_pixels(window.rem_size());
+        let line = window
             .text_system()
             .shape_line(display_text, font_size, &runs)
             .unwrap();
 
         let cursor_pos = line.x_for_index(cursor);
-        let cursor = if selected_range.is_empty() && input.show_cursor(cx) {
+        let cursor = if selected_range.is_empty() && input.show_cursor(window, cx) {
             Some(fill(
                 Bounds::new(
                     point(bounds.left() + cursor_pos, bounds.top() + Pixels(1.5)),
@@ -460,19 +467,21 @@ impl Element for TextElement {
         bounds: Bounds<Pixels>,
         _request_layout: &mut Self::RequestLayoutState,
         prepaint: &mut Self::PrepaintState,
-        cx: &mut WindowContext,
+        window: &mut Window,
+        cx: &mut App,
     ) {
         let focus_handle = self.input.read(cx).focus_handle.clone();
-        cx.handle_input(
+        window.handle_input(
             &focus_handle,
             ElementInputHandler::new(bounds, self.input.clone()),
+            cx
         );
         let line = prepaint.line.take().unwrap();
-        line.paint(bounds.origin, cx.line_height(), cx).unwrap();
+        line.paint(bounds.origin, window.line_height(), window, cx).unwrap();
 
-        if focus_handle.is_focused(cx) {
+        if focus_handle.is_focused(window) {
             if let Some(cursor) = prepaint.cursor.take() {
-                cx.paint_quad(cursor);
+                window.paint_quad(cursor);
             }
         }
 
@@ -484,7 +493,7 @@ impl Element for TextElement {
 }
 
 impl Render for TextInput {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
 
         div()
@@ -507,14 +516,14 @@ impl Render for TextInput {
                     .px(px(6.))
                     .text_color(theme.foreground)
                     .child(TextElement {
-                        input: cx.view().clone(),
+                        input: cx.entity().clone(),
                     }),
             )
     }
 }
 
-impl FocusableView for TextInput {
-    fn focus_handle(&self, _: &AppContext) -> FocusHandle {
+impl Focusable for TextInput {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
     }
 }

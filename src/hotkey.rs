@@ -36,7 +36,7 @@ impl From<i64> for Key {
 
 
 impl Hotkey {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let tx = cx.global::<Commander>().tx.clone();
         let current = CFRunLoop::get_current();
         let tap = CGEventTap::new(

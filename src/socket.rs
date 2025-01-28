@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
-use gpui::AppContext;
+use gpui::App;
 use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::watch;
@@ -22,7 +22,7 @@ pub struct Socket {
 }
 
 impl Socket {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let tx = cx.global::<Commander>().tx.clone();
         Self::listen_for_unix_socket_events(tx);
     }

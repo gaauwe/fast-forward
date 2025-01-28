@@ -1,4 +1,4 @@
-use gpui::{AppContext, Global};
+use gpui::{App, Global};
 use log::{info, error};
 use tray_icon::{menu::{Menu, MenuEvent, MenuItem}, TrayIcon, TrayIconBuilder};
 
@@ -27,7 +27,7 @@ impl MenuId {
 
 
 impl Tray {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let tx = cx.global::<Commander>().tx.clone();
         let icon = Self::load_icon();
         let menu = Menu::new();

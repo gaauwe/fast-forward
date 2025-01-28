@@ -6,11 +6,11 @@ use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWork
 
 use crate::ui::input::SearchQuery;
 use crate::window::Window;
-use crate::socket_message::App;
+use crate::socket_message::App as Application;
 use crate::ui::list::List;
 
 pub struct Applications {
-    pub list: Vec<App>,
+    pub list: Vec<Application>,
     pub index: usize,
     pub loading: bool,
 }
@@ -29,18 +29,18 @@ pub enum IndexType {
 }
 
 impl Applications {
-    pub fn new(cx: &mut AppContext) {
+    pub fn new(cx: &mut App) {
         let list = Vec::new();
         let applications = Self { list, index: 0, loading: true };
         cx.set_global(applications);
     }
 
-    pub fn update_list(cx: &mut AppContext, list: Vec<App>) {
+    pub fn update_list(cx: &mut App, list: Vec<Application>) {
         let applications = Self { list, index: 0, loading: false };
         cx.set_global(applications);
     }
 
-    pub fn update_active_index(cx: &mut AppContext, index_type: IndexType) {
+    pub fn update_active_index(cx: &mut App, index_type: IndexType) {
         let query = cx.global::<SearchQuery>();
         let applications = cx.global::<Applications>();
 
@@ -51,7 +51,7 @@ impl Applications {
         cx.set_global(applications);
     }
 
-    pub fn update_list_entry(cx: &mut AppContext, app: Option<&App>, index_type: Option<IndexType>) {
+    pub fn update_list_entry(cx: &mut App, app: Option<&Application>, index_type: Option<IndexType>) {
         let applications = cx.global::<Applications>();
         let mut applications = applications.clone();
 
@@ -77,10 +77,10 @@ impl Applications {
 
         // Re-render the list after the order has changed.
         let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, cx| cx.notify()).ok();
+        window.window.clone().update(cx, |_view, _window, cx| cx.notify()).ok();
     }
 
-    pub fn execute_action(cx: &mut AppContext, action_type: ActionType) {
+    pub fn execute_action(cx: &mut App, action_type: ActionType) {
         let applications = cx.global::<Applications>().clone();
         let window = cx.global::<Window>().window;
 
@@ -129,7 +129,7 @@ impl Applications {
         }
     }
 
-    fn get_index_from_type(list: &Vec<App>, current_index: usize, index_type: IndexType) -> usize {
+    fn get_index_from_type(list: &Vec<Application>, current_index: usize, index_type: IndexType) -> usize {
         match index_type {
             IndexType::Start => 0,
             IndexType::End => list.len(),
@@ -144,7 +144,7 @@ impl Applications {
         }
     }
 
-    fn get_native_app_instance(app: &App) -> Option<Retained<NSRunningApplication>> {
+    fn get_native_app_instance(app: &Application) -> Option<Retained<NSRunningApplication>> {
         unsafe {
             let running_applications = NSWorkspace::sharedWorkspace().runningApplications();
             running_applications.iter().find(|item| item.localizedName().unwrap().to_string() == app.name)

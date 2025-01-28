@@ -6,16 +6,16 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
 use crate::{applications::Applications, theme::Theme};
-use crate::socket_message::App;
+use crate::socket_message::App as Application;
 use super::icon::{IconColor, IconSize};
 use super::{icon::{Icon, IconName}, input::SearchQuery};
 
 pub struct List {
-    pub items: Vec<App>,
+    pub items: Vec<Application>,
 }
 
 impl List {
-    pub fn new(cx: &AppContext) -> Self {
+    pub fn new(cx: &App) -> Self {
         let applications = cx.global::<Applications>();
 
         Self {
@@ -23,7 +23,7 @@ impl List {
         }
     }
 
-    pub fn filter(query: &str, mut list: Vec<App>) -> Vec<App> {
+    pub fn filter(query: &str, mut list: Vec<Application>) -> Vec<Application> {
         let matcher = SkimMatcherV2::default();
 
         if query.is_empty() {
@@ -83,7 +83,7 @@ impl List {
 }
 
 impl Render for List {
-    fn render(&mut self, cx: &mut ViewContext<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
         let applications = cx.global::<Applications>();
         let query = cx.global::<SearchQuery>().value.as_str();
@@ -106,9 +106,9 @@ impl Render for List {
         self.items = Self::filter(query, applications.list.clone());
 
         if self.items.len() > 0 {
-            div().child(uniform_list(cx.view().clone(), "entries", self.items.len(), {
+            div().child(uniform_list(cx.entity().clone().clone(), "entries", self.items.len(), {
                 let list = self.items.clone();
-                move |_this, range, cx| {
+                move |_this, range, _window, cx| {
                     let theme = cx.global::<Theme>();
 
                     range.map(|i| {
