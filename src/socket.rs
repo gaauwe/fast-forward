@@ -9,9 +9,10 @@ use tokio::process::{Child, Command};
 use anyhow::Context;
 use std::io::prelude::*;
 use prost::Message;
+use log::error;
 
-use crate::applications::{Applications, IndexType};
-use crate::socket_message::{SocketMessage, socket_message::Event};
+use crate::commander::{Commander, EventType};
+use crate::socket_message::SocketMessage;
 
 const SWIFT_BINARY: &[u8] = include_bytes!("../swift-lib/.build/release/swift-lib");
 
@@ -22,45 +23,17 @@ pub struct Socket {
 
 impl Socket {
     pub fn new(cx: &mut AppContext) {
-        let (tx, mut rx) = watch::channel(SocketMessage::default());
-        cx.spawn(|cx| async move {
-            while rx.changed().await.is_ok() {
-                if let Some(event) = &rx.borrow().event {
-                    match event {
-                        Event::List(ref event) => {
-                            let _ = cx.update(|cx| {
-                                Applications::update_list(cx, event.apps.clone());
-                            });
-                        }
-                        Event::Launch(ref event) => {
-                            let _ = cx.update(|cx| {
-                                Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start));
-                            });
-                        }
-                        Event::Close(ref event) => {
-                            let _ = cx.update(|cx| {
-                                Applications::update_list_entry(cx, event.app.as_ref(), None);
-                            });
-                        }
-                        Event::Activate(ref event) => {
-                            let _ = cx.update(|cx| {
-                                Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start));
-                            });
-                        }
-                    };
-                }
-            }
-        }).detach();
-
+        let tx = cx.global::<Commander>().tx.clone();
         Self::listen_for_unix_socket_events(tx);
     }
 
-    fn listen_for_unix_socket_events(tx: watch::Sender<SocketMessage>) {
+    fn listen_for_unix_socket_events(tx: watch::Sender<EventType>) {
         tokio::spawn(async move {
             let socket_path = "/tmp/swift_monitor.sock";
             let mut swift_monitor = match Self::run_swift_monitor().await {
                 Ok(process) => process,
                 Err(e) => {
+                    error!("Failed to start Swift monitor: {}", e);
                     panic!("Failed to start Swift monitor: {}", e);
                 }
             };
@@ -69,16 +42,16 @@ impl Socket {
             let stream = match UnixStream::connect(socket_path).await {
                 Ok(stream) => stream,
                 Err(e) => {
+                    error!("Failed to connect to socket: {}", e);
                     panic!("Failed to connect to socket: {}", e);
                 }
             };
 
+            let mut length_buffer = [0u8; 4];
             let mut connection = Socket {
                 stream,
                 swift_monitor,
             };
-
-            let mut length_buffer = [0u8; 4];
 
             loop {
                 match connection.stream.read_exact(&mut length_buffer).await {
@@ -90,21 +63,25 @@ impl Socket {
                             Ok(_) => {
                                 match SocketMessage::decode(&*message_buffer) {
                                     Ok(message) => {
-                                        tx.send(message).expect("Failed to send event");
+                                        if let Some(event) = message.event {
+                                            tx.send(EventType::SocketEvent(event)).expect("Failed to send event");
+                                        } else {
+                                            error!("Failed to get event from message");
+                                        }
                                     }
                                     Err(e) => {
-                                        eprintln!("Failed to decode message: {}", e);
+                                        error!("Failed to decode message: {}", e);
                                     }
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Error while reading message from the socket: {}", e);
+                                error!("Error while reading message from the socket: {}", e);
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error while reading length from the socket: {}", e);
+                        error!("Error while reading length from the socket: {}", e);
                         break;
                     }
                 }

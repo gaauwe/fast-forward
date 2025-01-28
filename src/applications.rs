@@ -57,7 +57,11 @@ impl Applications {
 
         if let Some(app) = app {
             if let Some(existing_app_index) = applications.list.iter().position(|a| a.name == app.name) {
-                applications.list.remove(existing_app_index);
+                if let Some(_) = index_type {
+                    applications.list.remove(existing_app_index);
+                } else {
+                    applications.list[existing_app_index].pid = 0;
+                }
             }
 
             match index_type {

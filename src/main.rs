@@ -1,6 +1,8 @@
 mod applications;
+mod commander;
 mod config;
 mod hotkey;
+mod logger;
 mod theme;
 mod socket;
 mod tray;
@@ -15,8 +17,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use applications::Applications;
+use commander::Commander;
 use config::Config;
 use hotkey::Hotkey;
+use logger::Logger;
 use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;
 use theme::Theme;
 use socket::Socket;
@@ -25,7 +29,6 @@ use window::Window;
 use cocoa::appkit::NSApplication;
 use cocoa::appkit::NSApplicationActivationPolicy;
 use cocoa::base::nil;
-
 use gpui::*;
 
 #[tokio::main]
@@ -46,17 +49,20 @@ async fn main() {
             ns_app.setActivationPolicy_(NSApplicationActivationPolicy::NSApplicationActivationPolicyAccessory);
         }
 
-        // Check if the application is trusted to access the accessibility API.
-        if application_is_trusted_with_prompt() {
-            Socket::new(cx);
-            Hotkey::new(cx);
-        }
-
+        // Initialize the application components.
+        Logger::new();
+        Commander::new(cx);
         Tray::new(cx);
         Applications::new(cx);
         Config::new(cx);
         Theme::new(cx);
         Window::new(cx);
+
+        // Check if the application is trusted to access the accessibility API.
+        if application_is_trusted_with_prompt() {
+            Socket::new(cx);
+            Hotkey::new(cx);
+        }
     });
 }
 
