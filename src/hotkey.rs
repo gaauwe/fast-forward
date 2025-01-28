@@ -1,11 +1,11 @@
 use gpui::*;
+use log::{info, error};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
-use tokio::sync::watch;
 
-use crate::{applications::{ActionType, Applications}, window::Window};
+use crate::commander::{Commander, EventType, HotkeyEvent};
 
 static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
 static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
@@ -34,49 +34,10 @@ impl From<i64> for Key {
     }
 }
 
-pub enum EventType {
-    ShowWindow,
-    HideWindow,
-    HideApplication,
-    QuitApplication,
-    None
-}
 
 impl Hotkey {
     pub fn new(cx: &mut AppContext) {
-        let (tx, mut rx) = watch::channel(EventType::None);
-        cx.spawn(|cx| async move {
-            while rx.changed().await.is_ok() {
-                match *rx.borrow() {
-                    EventType::ShowWindow => {
-                        let _ = cx.update(|cx| {
-                            Window::show(cx);
-                        });
-                    }
-                    EventType::HideWindow => {
-                        let _ = cx.update(|cx| {
-                            if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst)  {
-                                Applications::execute_action(cx, ActionType::Activate)
-                            }
-
-                            Window::hide(cx);
-                        });
-                    },
-                    EventType::HideApplication => {
-                        let _ = cx.update(|cx| {
-                            Applications::execute_action(cx, ActionType::Hide)
-                        });
-                    },
-                    EventType::QuitApplication => {
-                        let _ = cx.update(|cx| {
-                            Applications::execute_action(cx, ActionType::Quit)
-                        });
-                    },
-                    EventType::None => {}
-                }
-            }
-        }).detach();
-
+        let tx = cx.global::<Commander>().tx.clone();
         let current = CFRunLoop::get_current();
         let tap = CGEventTap::new(
             CGEventTapLocation::Session,
@@ -93,9 +54,15 @@ impl Hotkey {
                         if keycode == Key::RightCommand as i64 {
                             let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
                             if right_cmd_is_down {
-                                tx.send(EventType::ShowWindow).expect("Failed to send ShowWindow event");
+                                info!("Right Command key pressed");
+                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::ShowWindow)) {
+                                    error!("Failed to send ShowWindow event: {:?}", e);
+                                }
                             } else {
-                                tx.send(EventType::HideWindow).expect("Failed to send HideWindow event");
+                                info!("Right Command key released");
+                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::HideWindow)) {
+                                    error!("Failed to send HideWindow event: {:?}", e);
+                                }
                             }
 
                             RIGHT_CMD_IS_DOWN.store(right_cmd_is_down, Ordering::SeqCst);
@@ -118,13 +85,19 @@ impl Hotkey {
 
                         match Key::from(keycode) {
                             Key::Escape => {
-                                tx.send(EventType::QuitApplication).expect("Failed to send QuitApplication event");
+                                info!("Escape key pressed");
+                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::QuitApplication)) {
+                                    error!("Failed to send QuitApplication event: {:?}", e);
+                                }
 
                                 new_event.set_type(CGEventType::Null);
                                 ESCAPE_PRESSED.store(true, Ordering::SeqCst);
                             },
                             Key::Space => {
-                                tx.send(EventType::HideApplication).expect("Failed to send HideApplication event");
+                                info!("Space key pressed");
+                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::HideApplication)) {
+                                    error!("Failed to send HideApplication event: {:?}", e);
+                                }
 
                                 new_event.set_type(CGEventType::Null);
                                 SPACE_PRESSED.store(true, Ordering::SeqCst);
@@ -140,11 +113,17 @@ impl Hotkey {
 
                 Some(new_event)
             },
-        ).expect("Failed to create event tap");
+        ).unwrap_or_else(|e| {
+            error!("Failed to create event tap: {:?}", e);
+            panic!("Failed to create event tap");
+        });
 
         let loop_source = tap.mach_port
             .create_runloop_source(0)
-            .expect("Failed to create runloop source");
+            .unwrap_or_else(|e| {
+                error!("Failed to create runloop source: {:?}", e);
+                panic!("Failed to create runloop source");
+            });
 
         unsafe {
             current.add_source(&loop_source, kCFRunLoopCommonModes);

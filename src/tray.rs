@@ -1,8 +1,8 @@
 use gpui::{AppContext, Global};
-use tokio::sync::watch;
+use log::{info, error};
 use tray_icon::{menu::{Menu, MenuEvent, MenuItem}, TrayIcon, TrayIconBuilder};
 
-use crate::config::Config;
+use crate::commander::{Commander, EventType, TrayEvent};
 
 pub struct Tray {
     _tray: TrayIcon,
@@ -25,42 +25,10 @@ impl MenuId {
     }
 }
 
-pub enum EventType {
-    Settings,
-    About,
-    Quit,
-    None
-}
 
 impl Tray {
     pub fn new(cx: &mut AppContext) {
-        let (tx, mut rx) = watch::channel(EventType::None);
-        cx.spawn(|cx| async move {
-            while rx.changed().await.is_ok() {
-                match *rx.borrow() {
-                    EventType::Settings => {
-                        let config_path = Config::config_path().unwrap();
-                        let _ = std::process::Command::new("open")
-                            .arg("-a")
-                            .arg("TextEdit")
-                            .arg(&config_path)
-                            .spawn();
-                    }
-                    EventType::About => {
-                        let _ = cx.update(|cx| {
-                            cx.open_url("https://github.com/gaauwe/fast-forward")
-                        });
-                    },
-                    EventType::Quit => {
-                        let _ = cx.update(|cx| {
-                            cx.quit()
-                        });
-                    },
-                    EventType::None => {}
-                }
-            }
-        }).detach();
-
+        let tx = cx.global::<Commander>().tx.clone();
         let icon = Self::load_icon();
         let menu = Menu::new();
 
@@ -81,10 +49,23 @@ impl Tray {
             .unwrap();
 
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
+            info!("Sending event: {:?}", event);
             match event.id.0.as_str() {
-                id if id == MenuId::Settings.as_str() => tx.send(EventType::Settings).expect("Failed to forward Settings event"),
-                id if id == MenuId::About.as_str() => tx.send(EventType::About).expect("Failed to forward About event"),
-                id if id == MenuId::Quit.as_str() => tx.send(EventType::Quit).expect("Failed to forward Quit event"),
+                id if id == MenuId::Settings.as_str() => {
+                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Settings)) {
+                        error!("Failed to forward Settings event: {:?}", e);
+                    }
+                },
+                id if id == MenuId::About.as_str() => {
+                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::About)) {
+                        error!("Failed to forward About event: {:?}", e);
+                    }
+                },
+                id if id == MenuId::Quit.as_str() => {
+                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Quit)) {
+                        error!("Failed to forward Quit event: {:?}", e);
+                    }
+                },
                 _ => {}
             }
         }));
@@ -94,20 +75,25 @@ impl Tray {
         });
     }
 
-
     fn load_icon() -> tray_icon::Icon {
         let (icon_rgba, icon_width, icon_height) = {
             let icon_bytes = include_bytes!("../assets/tray_icon.png");
             let image = image::load_from_memory(icon_bytes)
-                .expect("Failed to open icon path")
+                .unwrap_or_else(|e| {
+                    error!("Failed to open icon path: {:?}", e);
+                    panic!("Failed to open icon");
+                })
                 .into_rgba8();
             let (width, height) = image.dimensions();
             let rgba = image.into_raw();
             (rgba, width, height)
         };
-        tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height).expect("Failed to open icon")
+        tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+            .unwrap_or_else(|e| {
+                error!("Failed to open icon: {:?}", e);
+                panic!("Failed to open icon");
+            })
     }
-
 }
 
 impl Global for Tray {}
