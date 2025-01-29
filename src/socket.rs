@@ -4,6 +4,7 @@ use std::process::Stdio;
 use gpui::App;
 use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch;
 use tokio::process::{Child, Command};
 use anyhow::Context;
@@ -27,7 +28,7 @@ impl Socket {
         Self::listen_for_unix_socket_events(tx);
     }
 
-    fn listen_for_unix_socket_events(tx: watch::Sender<EventType>) {
+    fn listen_for_unix_socket_events(tx: UnboundedSender<EventType>) {
         tokio::spawn(async move {
             let socket_path = "/tmp/swift_monitor.sock";
             let mut swift_monitor = match Self::run_swift_monitor().await {

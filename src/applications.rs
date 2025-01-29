@@ -90,7 +90,7 @@ impl Applications {
         }
 
         if let Some(app) = list.get(applications.index) {
-            let native_app = Self::get_native_app_instance(app);
+            let native_app = Self::get_running_app_instance(app);
             if let Some(native_app) = native_app {
                 match action_type {
                     ActionType::Activate => {
@@ -144,7 +144,7 @@ impl Applications {
         }
     }
 
-    fn get_native_app_instance(app: &Application) -> Option<Retained<NSRunningApplication>> {
+    fn get_running_app_instance(app: &Application) -> Option<Retained<NSRunningApplication>> {
         unsafe {
             let running_applications = NSWorkspace::sharedWorkspace().runningApplications();
             running_applications.iter().find(|item| item.localizedName().unwrap().to_string() == app.name)

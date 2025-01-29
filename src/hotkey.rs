@@ -54,12 +54,12 @@ impl Hotkey {
                         if keycode == Key::RightCommand as i64 {
                             let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
                             if right_cmd_is_down {
-                                info!("Right Command key pressed");
+                                info!("Sent event: HotkeyEvent::ShowWindow");
                                 if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::ShowWindow)) {
                                     error!("Failed to send ShowWindow event: {:?}", e);
                                 }
                             } else {
-                                info!("Right Command key released");
+                                info!("Sent event: HotkeyEvent::HideWindow");
                                 if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::HideWindow)) {
                                     error!("Failed to send HideWindow event: {:?}", e);
                                 }
@@ -85,7 +85,7 @@ impl Hotkey {
 
                         match Key::from(keycode) {
                             Key::Escape => {
-                                info!("Escape key pressed");
+                                info!("Sent event: HotkeyEvent::QuitApplication");
                                 if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::QuitApplication)) {
                                     error!("Failed to send QuitApplication event: {:?}", e);
                                 }
@@ -94,7 +94,7 @@ impl Hotkey {
                                 ESCAPE_PRESSED.store(true, Ordering::SeqCst);
                             },
                             Key::Space => {
-                                info!("Space key pressed");
+                                info!("Sent event: HotkeyEvent::HideApplication");
                                 if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::HideApplication)) {
                                     error!("Failed to send HideApplication event: {:?}", e);
                                 }

@@ -1,6 +1,7 @@
 use gpui::*;
 use log::{info, error};
-use tokio::sync::watch;
+use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::time::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::{applications::IndexType, socket_message::socket_message::Event as SocketEvent};
@@ -10,14 +11,13 @@ static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
 static SPACE_PRESSED: AtomicBool = AtomicBool::new(false);
 
 pub struct Commander {
-    pub tx: watch::Sender<EventType>,
+    pub tx: UnboundedSender<EventType>,
 }
 
 pub enum EventType {
     HotkeyEvent(HotkeyEvent),
     TrayEvent(TrayEvent),
     SocketEvent(SocketEvent),
-    None
 }
 
 pub enum HotkeyEvent {
@@ -35,134 +35,115 @@ pub enum TrayEvent {
 
 impl Commander {
     pub fn new(cx: &mut App) {
-        let (tx, mut rx) = watch::channel(EventType::None);
+        let (tx, mut rx) = mpsc::unbounded_channel();
         cx.spawn(|cx| async move {
             loop {
-                match *rx.borrow_and_update() {
-                    EventType::HotkeyEvent(ref event) => {
-                        match event {
-                            HotkeyEvent::ShowWindow => {
-                                info!("Received event: HotkeyEvent::ShowWindow");
-                                if let Err(e) = cx.update(|cx| {
-                                    Window::show(cx);
-                                }) {
-                                    error!("Failed to show window: {:?}", e);
-                                }
+                match rx.try_recv() {
+                    Ok(event) => {
+                        if rx.is_empty() {
+                            if let Err(e) = handle_event(&cx, event).await {
+                                error!("Failed to handle event: {:?}", e);
                             }
-                            HotkeyEvent::HideWindow => {
-                                info!("Received event: HotkeyEvent::HideWindow");
-                                if let Err(e) = cx.update(|cx| {
-                                    if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst)  {
-                                        Applications::execute_action(cx, ActionType::Activate)
-                                    }
-
-                                    Window::hide(cx);
-                                }) {
-                                    error!("Failed to hide window: {:?}", e);
-                                }
-                            }
-                            HotkeyEvent::HideApplication => {
-                                info!("Received event: HotkeyEvent::HideApplication");
-                                if let Err(e) = cx.update(|cx| {
-                                    Applications::execute_action(cx, ActionType::Hide)
-                                }) {
-                                    error!("Failed to hide application: {:?}", e);
-                                }
-                            }
-                            HotkeyEvent::QuitApplication => {
-                                info!("Received event: HotkeyEvent::QuitApplication");
-                                if let Err(e) = cx.update(|cx| {
-                                    Applications::execute_action(cx, ActionType::Quit)
-                                }) {
-                                    error!("Failed to quit application: {:?}", e);
+                        } else {
+                            while let Ok(event) = rx.try_recv() {
+                                if let Err(e) = handle_event(&cx, event).await {
+                                    error!("Failed to handle event: {:?}", e);
                                 }
                             }
                         }
                     }
-                    EventType::SocketEvent(ref event) => {
-                        match event {
-                            SocketEvent::List(ref event) => {
-                                info!("Received event: SocketEvent::List");
-                                if let Err(e) = cx.update(|cx| {
-                                    Applications::update_list(cx, event.apps.clone());
-                                }) {
-                                    error!("Failed to update list: {:?}", e);
-                                }
-                            }
-                            SocketEvent::Launch(ref event) => {
-                                info!("Received event: SocketEvent::Launch");
-                                if let Err(e) = cx.update(|cx| {
-                                    Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start));
-                                }) {
-                                    error!("Failed to update list entry on launch: {:?}", e);
-                                }
-                            }
-                            SocketEvent::Close(ref event) => {
-                                info!("Received event: SocketEvent::Close");
-                                if let Err(e) = cx.update(|cx| {
-                                    Applications::update_list_entry(cx, event.app.as_ref(), None);
-                                }) {
-                                    error!("Failed to update list entry on close: {:?}", e);
-                                }
-                            }
-                            SocketEvent::Activate(ref event) => {
-                                info!("Received event: SocketEvent::Activate");
-                                if let Err(e) = cx.update(|cx| {
-                                    Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start));
-                                }) {
-                                    error!("Failed to update list entry on activate: {:?}", e);
-                                }
-                            }
-                        }
+                    Err(_) => {
+                        // No event received, continue the loop
                     }
-                    EventType::TrayEvent(ref event) => {
-                        match event {
-                            TrayEvent::Settings => {
-                                info!("Received event: Event::Settings");
-                                let config_path = Config::config_path().unwrap();
-                                if let Err(e) = std::process::Command::new("open")
-                                    .arg("-a")
-                                    .arg("TextEdit")
-                                    .arg(&config_path)
-                                    .spawn()
-                                {
-                                    error!("Failed to open settings: {:?}", e);
-                                }
-                            }
-                            TrayEvent::About => {
-                                info!("Received event: Event::About");
-                                if let Err(e) = cx.update(|cx| {
-                                    cx.open_url("https://github.com/gaauwe/fast-forward")
-                                }) {
-                                    error!("Failed to open about URL: {:?}", e);
-                                }
-                            },
-                            TrayEvent::Quit => {
-                                info!("Received event: Event::Quit");
-                                if let Err(e) = cx.update(|cx| {
-                                    cx.quit()
-                                }) {
-                                    error!("Failed to quit application: {:?}", e);
-                                }
-                            }
-                        }
-                    }
-                    EventType::None => {}
                 }
-
-                if let Err(e) = rx.changed().await {
-                    error!("Receiving channel failed: {:?}", e);
-                    break;
-                }
+                cx.background_executor()
+                    .timer(Duration::from_millis(50))
+                    .await;
             }
-
-            info!("Event loop terminated");
         }).detach();
 
-        cx.set_global::<Commander>(Self {
-            tx,
-        });
+        cx.set_global::<Commander>(Self { tx });
     }
+}
+
+async fn handle_event(cx: &AsyncApp, event: EventType) -> Result<(), Box<dyn std::error::Error>> {
+    match event {
+        EventType::HotkeyEvent(event) => handle_hotkey_event(cx, event).await,
+        EventType::TrayEvent(event) => handle_tray_event(cx, event).await,
+        EventType::SocketEvent(event) => handle_socket_event(cx, event).await,
+    }
+}
+
+async fn handle_hotkey_event(cx: &AsyncApp, event: HotkeyEvent) -> Result<(), Box<dyn std::error::Error>> {
+    match event {
+        HotkeyEvent::ShowWindow => {
+            info!("Received event: HotkeyEvent::ShowWindow");
+            cx.update(|cx| Window::show(cx))?;
+        }
+        HotkeyEvent::HideWindow => {
+            info!("Received event: HotkeyEvent::HideWindow");
+            cx.update(|cx| {
+                if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst) {
+                    Applications::execute_action(cx, ActionType::Activate)
+                }
+                Window::hide(cx)
+            })?;
+        }
+        HotkeyEvent::HideApplication => {
+            info!("Received event: HotkeyEvent::HideApplication");
+            cx.update(|cx| Applications::execute_action(cx, ActionType::Hide))?;
+        }
+        HotkeyEvent::QuitApplication => {
+            info!("Received event: HotkeyEvent::QuitApplication");
+            cx.update(|cx| Applications::execute_action(cx, ActionType::Quit))?;
+        }
+    }
+    Ok(())
+}
+
+async fn handle_tray_event(cx: &AsyncApp, event: TrayEvent) -> Result<(), Box<dyn std::error::Error>> {
+    match event {
+        TrayEvent::Settings => {
+            info!("Received event: TrayEvent::Settings");
+            let config_path = Config::config_path()?;
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg("TextEdit")
+                .arg(&config_path)
+                .spawn()?;
+        }
+        TrayEvent::About => {
+            info!("Received event: TrayEvent::About");
+            cx.update(|cx| cx.open_url("https://github.com/gaauwe/fast-forward"))?;
+        }
+        TrayEvent::Quit => {
+            info!("Received event: TrayEvent::Quit");
+            cx.update(|cx| cx.quit())?;
+        }
+    }
+    Ok(())
+}
+
+async fn handle_socket_event(cx: &AsyncApp, event: SocketEvent) -> Result<(), Box<dyn std::error::Error>> {
+    match event {
+        SocketEvent::List(event) => {
+            info!("Received event: SocketEvent::List");
+            cx.update(|cx| Applications::update_list(cx, event.apps.clone()))?;
+        }
+        SocketEvent::Launch(event) => {
+            info!("Received event: SocketEvent::Launch");
+            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start)))?;
+        }
+        SocketEvent::Close(event) => {
+            info!("Received event: SocketEvent::Close");
+            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), None))?;
+        }
+        SocketEvent::Activate(event) => {
+            info!("Received event: SocketEvent::Activate");
+            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start)))?;
+        }
+    }
+    Ok(())
 }
 
 impl Global for Commander {}

@@ -1494,7 +1494,7 @@ dependencies = [
 
 [[package]]
 name = "fast-forward"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "cocoa 0.25.0",
