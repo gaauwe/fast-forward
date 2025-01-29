@@ -5,7 +5,7 @@ use blink_cursor::BlinkCursor;
 use gpui::{
     actions, div, fill, point, prelude::*, px, relative, size, App, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window
 };
-use unicode_segmentation::*;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{applications::{Applications, IndexType}, theme::Theme};
 
@@ -103,7 +103,7 @@ impl TextInput {
         if self.selected_range.is_empty() {
             self.move_to(self.previous_boundary(self.cursor_offset()), cx);
         } else {
-            self.move_to(self.selected_range.start, cx)
+            self.move_to(self.selected_range.start, cx);
         }
     }
 
@@ -112,7 +112,7 @@ impl TextInput {
         if self.selected_range.is_empty() {
             self.move_to(self.next_boundary(self.selected_range.end), cx);
         } else {
-            self.move_to(self.selected_range.end, cx)
+            self.move_to(self.selected_range.end, cx);
         }
     }
 
@@ -129,15 +129,15 @@ impl TextInput {
     fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         if self.selected_range.is_empty() {
-            self.select_to(self.previous_boundary(self.cursor_offset()), cx)
+            self.select_to(self.previous_boundary(self.cursor_offset()), cx);
         }
-        self.replace_text_in_range(None, "", window, cx)
+        self.replace_text_in_range(None, "", window, cx);
     }
 
     fn move_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         self.pause_blink_cursor(cx);
         self.selected_range = offset..offset;
-        cx.notify()
+        cx.notify();
     }
 
     fn cursor_offset(&self) -> usize {
@@ -155,7 +155,7 @@ impl TextInput {
     }
 
     fn on_key_down_for_blink_cursor(&mut self, _: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
-        self.pause_blink_cursor(cx)
+        self.pause_blink_cursor(cx);
     }
 
     pub(crate) fn show_cursor(&self, window: &mut Window, cx: &App) -> bool {
@@ -164,15 +164,15 @@ impl TextInput {
 
     fn select_to(&mut self, offset: usize, cx: &mut Context<Self>) {
         if self.selection_reversed {
-            self.selected_range.start = offset
+            self.selected_range.start = offset;
         } else {
-            self.selected_range.end = offset
+            self.selected_range.end = offset;
         };
         if self.selected_range.end < self.selected_range.start {
             self.selection_reversed = !self.selection_reversed;
             self.selected_range = self.selected_range.end..self.selected_range.start;
         }
-        cx.notify()
+        cx.notify();
     }
 
     fn offset_from_utf16(&self, offset: usize) -> usize {
@@ -312,9 +312,7 @@ impl EntityInputHandler for TextInput {
         self.marked_range = Some(range.start..range.start + new_text.len());
         self.selected_range = new_selected_range_utf16
             .as_ref()
-            .map(|range_utf16| self.range_from_utf16(range_utf16))
-            .map(|new_range| new_range.start + range.start..new_range.end + range.end)
-            .unwrap_or_else(|| range.start + new_text.len()..range.start + new_text.len());
+            .map(|range_utf16| self.range_from_utf16(range_utf16)).map_or_else(|| range.start + new_text.len()..range.start + new_text.len(), |new_range| new_range.start + range.start..new_range.end + range.end);
 
         cx.notify();
     }

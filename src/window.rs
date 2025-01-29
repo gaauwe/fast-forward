@@ -1,5 +1,5 @@
 use core_graphics::display::{CGDisplay, CGPoint};
-use gpui::*;
+use gpui::{App, AppContext, Bounds, DisplayId, Global, Pixels, Point, Size, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions};
 use mouse_position::mouse_position::Mouse;
 
 use crate::{applications::{Applications, IndexType}, ui::{input::SearchQuery, Container}};
@@ -12,14 +12,14 @@ pub struct Window {
 impl Window {
     pub fn new(cx: &mut App) {
         // Calculate the bounds of the active display.
-        let display_id = Some(Self::get_active_display_id(cx));
-        let bounds = cx.displays().iter().find(|d| Some(d.id()) == display_id).map(|d| d.bounds()).unwrap_or(Bounds {
+        let display_id = Self::get_active_display_id(cx);
+        let bounds = cx.displays().iter().find(|d| d.id() == display_id).map_or(Bounds {
             origin: Point::new(Pixels::from(0.0), Pixels::from(0.0)),
             size: Size {
                 width: Pixels::from(1920.0),
                 height: Pixels::from(1080.0),
             },
-        });
+        }, |d| d.bounds());
 
         // Calculate the height and position of the window.
         let height = Pixels(bounds.size.height.0 * 0.5);
@@ -39,7 +39,7 @@ impl Window {
                 window_background: WindowBackgroundAppearance::Blurred,
                 kind: WindowKind::PopUp,
                 is_movable: false,
-                display_id,
+                display_id: Some(display_id),
                 ..Default::default()
             },
             |window, cx| {
@@ -58,7 +58,7 @@ impl Window {
 
         cx.set_global(Self {
             window,
-            display_id: display_id.unwrap(),
+            display_id,
         });
     }
 
@@ -132,12 +132,12 @@ impl Window {
                     let display = CGDisplay::new(display_id);
                     let bounds = display.bounds();
 
-                    if bounds.contains(&CGPoint { x: x as f64, y: y as f64 }) {
+                    if bounds.contains(&CGPoint { x: f64::from(x), y: f64::from(y) }) {
                         // Find the corresponding GPUI display, since that returns a DisplayId that we can use to open a window.
                         let gpui_display = gpui_displays.iter().find(|d| {
                             // We can't access the private integer, but the struct does implement fmt based on the private integer 🥴.
                             let id = format!("{:?}", d.id());
-                            id == format!("DisplayId({})", display_id)
+                            id == format!("DisplayId({display_id})")
                         });
 
                         return gpui_display.unwrap().id();

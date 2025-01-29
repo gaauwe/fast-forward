@@ -10,9 +10,6 @@ fn main() {
         .status()
         .expect("Failed to build Swift package");
 
-    if !status.success() {
-        panic!("Failed to build Swift package");
-    }
-
+    assert!(status.success(), "Failed to build Swift package");
     prost_build::compile_protos(&["src/proto/socket.proto"], &["src/proto"]).unwrap();
 }

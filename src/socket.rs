@@ -5,7 +5,6 @@ use gpui::App;
 use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::watch;
 use tokio::process::{Child, Command};
 use anyhow::Context;
 use std::io::prelude::*;
@@ -31,11 +30,11 @@ impl Socket {
     fn listen_for_unix_socket_events(tx: UnboundedSender<EventType>) {
         tokio::spawn(async move {
             let socket_path = "/tmp/swift_monitor.sock";
-            let mut swift_monitor = match Self::run_swift_monitor().await {
+            let mut swift_monitor = match Self::run_swift_monitor() {
                 Ok(process) => process,
                 Err(e) => {
-                    error!("Failed to start Swift monitor: {}", e);
-                    panic!("Failed to start Swift monitor: {}", e);
+                    error!("Failed to start Swift monitor: {e}");
+                    panic!("Failed to start Swift monitor: {e}");
                 }
             };
 
@@ -43,8 +42,8 @@ impl Socket {
             let stream = match UnixStream::connect(socket_path).await {
                 Ok(stream) => stream,
                 Err(e) => {
-                    error!("Failed to connect to socket: {}", e);
-                    panic!("Failed to connect to socket: {}", e);
+                    error!("Failed to connect to socket: {e}");
+                    panic!("Failed to connect to socket: {e}");
                 }
             };
 
@@ -71,18 +70,18 @@ impl Socket {
                                         }
                                     }
                                     Err(e) => {
-                                        error!("Failed to decode message: {}", e);
+                                        error!("Failed to decode message: {e}");
                                     }
                                 }
                             }
                             Err(e) => {
-                                error!("Error while reading message from the socket: {}", e);
+                                error!("Error while reading message from the socket: {e}");
                                 break;
                             }
                         }
                     }
                     Err(e) => {
-                        error!("Error while reading length from the socket: {}", e);
+                        error!("Error while reading length from the socket: {e}");
                         break;
                     }
                 }
@@ -138,7 +137,7 @@ impl Socket {
         Ok(binary_path)
     }
 
-    async fn run_swift_monitor() -> std::io::Result<Child> {
+    fn run_swift_monitor() -> std::io::Result<Child> {
         let binary_path = Self::save_swift_binary();
         match &binary_path {
             Ok(path) => {
@@ -158,6 +157,6 @@ impl Socket {
 
 impl Drop for Socket {
     fn drop(&mut self) {
-        let _ = self.swift_monitor.kill();
+        std::mem::drop(self.swift_monitor.kill());
     }
 }

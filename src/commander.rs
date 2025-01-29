@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{App, AsyncApp, Global, Result};
 use log::{info, error};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::Duration;
@@ -14,6 +14,7 @@ pub struct Commander {
     pub tx: UnboundedSender<EventType>,
 }
 
+#[allow(clippy::enum_variant_names)]
 pub enum EventType {
     HotkeyEvent(HotkeyEvent),
     TrayEvent(TrayEvent),
@@ -38,22 +39,9 @@ impl Commander {
         let (tx, mut rx) = mpsc::unbounded_channel();
         cx.spawn(|cx| async move {
             loop {
-                match rx.try_recv() {
-                    Ok(event) => {
-                        if rx.is_empty() {
-                            if let Err(e) = handle_event(&cx, event).await {
-                                error!("Failed to handle event: {:?}", e);
-                            }
-                        } else {
-                            while let Ok(event) = rx.try_recv() {
-                                if let Err(e) = handle_event(&cx, event).await {
-                                    error!("Failed to handle event: {:?}", e);
-                                }
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        // No event received, continue the loop
+                while let Ok(event) = rx.try_recv() {
+                    if let Err(e) = handle_event(&cx, event) {
+                        error!("Failed to handle event: {:?}", e);
                     }
                 }
                 cx.background_executor()
@@ -66,27 +54,27 @@ impl Commander {
     }
 }
 
-async fn handle_event(cx: &AsyncApp, event: EventType) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_event(cx: &AsyncApp, event: EventType) -> Result<(), Box<dyn std::error::Error>> {
     match event {
-        EventType::HotkeyEvent(event) => handle_hotkey_event(cx, event).await,
-        EventType::TrayEvent(event) => handle_tray_event(cx, event).await,
-        EventType::SocketEvent(event) => handle_socket_event(cx, event).await,
+        EventType::HotkeyEvent(event) => handle_hotkey_event(cx, event),
+        EventType::TrayEvent(event) => handle_tray_event(cx, event),
+        EventType::SocketEvent(event) => handle_socket_event(cx, event),
     }
 }
 
-async fn handle_hotkey_event(cx: &AsyncApp, event: HotkeyEvent) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_hotkey_event(cx: &AsyncApp, event: HotkeyEvent) -> Result<(), Box<dyn std::error::Error>> {
     match event {
         HotkeyEvent::ShowWindow => {
             info!("Received event: HotkeyEvent::ShowWindow");
-            cx.update(|cx| Window::show(cx))?;
+            cx.update(Window::show)?;
         }
         HotkeyEvent::HideWindow => {
             info!("Received event: HotkeyEvent::HideWindow");
             cx.update(|cx| {
                 if !SPACE_PRESSED.load(Ordering::SeqCst) && !ESCAPE_PRESSED.load(Ordering::SeqCst) {
-                    Applications::execute_action(cx, ActionType::Activate)
+                    Applications::execute_action(cx, ActionType::Activate);
                 }
-                Window::hide(cx)
+                Window::hide(cx);
             })?;
         }
         HotkeyEvent::HideApplication => {
@@ -101,7 +89,7 @@ async fn handle_hotkey_event(cx: &AsyncApp, event: HotkeyEvent) -> Result<(), Bo
     Ok(())
 }
 
-async fn handle_tray_event(cx: &AsyncApp, event: TrayEvent) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_tray_event(cx: &AsyncApp, event: TrayEvent) -> Result<(), Box<dyn std::error::Error>> {
     match event {
         TrayEvent::Settings => {
             info!("Received event: TrayEvent::Settings");
@@ -124,7 +112,7 @@ async fn handle_tray_event(cx: &AsyncApp, event: TrayEvent) -> Result<(), Box<dy
     Ok(())
 }
 
-async fn handle_socket_event(cx: &AsyncApp, event: SocketEvent) -> Result<(), Box<dyn std::error::Error>> {
+fn handle_socket_event(cx: &AsyncApp, event: SocketEvent) -> Result<(), Box<dyn std::error::Error>> {
     match event {
         SocketEvent::List(event) => {
             info!("Received event: SocketEvent::List");

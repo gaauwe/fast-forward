@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{App, Global, Hsla, hsla};
 use serde::Deserialize;
 
 use crate::config::Config;
@@ -51,9 +51,9 @@ impl Default for Theme {
         Self {
             primary: hsla(0.508, 0.33, 0.38, 1.),
             background: hsla(0., 0., 15. / 100., 0.9),
-            foreground: hsla(0., 0., 100. / 100., 0.8),
+            foreground: hsla(0., 0., 1., 0.8),
             muted: hsla(0., 0., 31. / 100., 1.),
-            muted_foreground: hsla(0., 0., 100. / 100., 0.4),
+            muted_foreground: hsla(0., 0., 1., 0.4),
             border: hsla(0., 0., 31. / 100., 1.),
         }
     }

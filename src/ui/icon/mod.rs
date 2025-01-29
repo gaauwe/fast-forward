@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{App, IntoElement, RenderOnce, Styled, Transformation, Window, px, svg};
 
 use crate::theme::Theme;
 

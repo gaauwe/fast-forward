@@ -2,7 +2,7 @@ pub mod icon;
 pub mod input;
 pub mod list;
 
-use gpui::*;
+use gpui::{App, AppContext, ClickEvent, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Window, div, prelude, px};
 use input::{SearchQuery, TextInput};
 use prelude::FluentBuilder;
 use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;

@@ -1,3 +1,4 @@
+#![allow(clippy::new_ret_no_self)]
 mod applications;
 mod commander;
 mod config;
@@ -29,7 +30,7 @@ use window::Window;
 use cocoa::appkit::NSApplication;
 use cocoa::appkit::NSApplicationActivationPolicy;
 use cocoa::base::nil;
-use gpui::*;
+use gpui::{App, Application, AssetSource, Result, SharedString};
 
 #[tokio::main]
 async fn main() {
@@ -74,7 +75,7 @@ impl AssetSource for Assets {
     fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
         fs::read(self.base.join(path))
             .map(|data| Some(std::borrow::Cow::Owned(data)))
-            .map_err(|err| err.into())
+            .map_err(std::convert::Into::into)
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
@@ -89,6 +90,6 @@ impl AssetSource for Assets {
                     })
                     .collect()
             })
-            .map_err(|err| err.into())
+            .map_err(std::convert::Into::into)
     }
 }

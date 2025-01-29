@@ -1,4 +1,4 @@
-use gpui::*;
+use gpui::{App, Global};
 use log::{info, error};
 use std::sync::atomic::{AtomicBool, Ordering};
 

@@ -11,6 +11,7 @@ pub struct TomlConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[derive(Default)]
 pub struct Config {
     pub theme: Theme,
 }
@@ -18,7 +19,7 @@ pub struct Config {
 impl Config {
     pub fn new(cx: &mut App) {
         let config = Config::load().unwrap_or_else(|err| {
-            eprintln!("Failed to load configuration: {}", err);
+            eprintln!("Failed to load configuration: {err}");
             Config::default()
         });
 
@@ -33,20 +34,20 @@ impl Config {
         }
 
         let content = fs::read_to_string(&config_path)
-            .with_context(|| format!("Failed to read config file at {:?}", config_path))?;
+            .with_context(|| format!("Failed to read config file at {config_path:?}"))?;
 
         let config: TomlConfig = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse config file at {:?}", config_path))?;
+            .with_context(|| format!("Failed to parse config file at {config_path:?}"))?;
 
         let default_theme = Theme::default();
         let result = Self {
             theme: Theme {
-                primary: config.theme.primary.map(Into::into).unwrap_or(default_theme.primary),
-                background: config.theme.background.map(Into::into).unwrap_or(default_theme.background),
-                foreground: config.theme.foreground.map(Into::into).unwrap_or(default_theme.foreground),
-                muted: config.theme.muted.map(Into::into).unwrap_or(default_theme.muted),
-                muted_foreground: config.theme.muted_foreground.map(Into::into).unwrap_or(default_theme.muted_foreground),
-                border: config.theme.border.map(Into::into).unwrap_or(default_theme.border),
+                primary: config.theme.primary.map_or(default_theme.primary, Into::into),
+                background: config.theme.background.map_or(default_theme.background, Into::into),
+                foreground: config.theme.foreground.map_or(default_theme.foreground, Into::into),
+                muted: config.theme.muted.map_or(default_theme.muted, Into::into),
+                muted_foreground: config.theme.muted_foreground.map_or(default_theme.muted_foreground, Into::into),
+                border: config.theme.border.map_or(default_theme.border, Into::into),
             }
         };
 
@@ -61,7 +62,7 @@ impl Config {
         }
 
         fs::write(config_path, example_config)
-            .with_context(|| format!("Failed to write example config to {:?}", config_path))?;
+            .with_context(|| format!("Failed to write example config to {config_path:?}"))?;
 
         Ok(())
     }
@@ -76,11 +77,3 @@ impl Config {
 }
 
 impl Global for Config {}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            theme: Theme::default()
-        }
-    }
-}

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use gpui::*;
+use gpui::{Animation, AnimationExt, App, Context, Div, Element, InteractiveElement, IntoElement, ParentElement, Render, Styled, Transformation, Window, div, img, percentage, prelude, px, uniform_list};
 use prelude::FluentBuilder;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
@@ -105,7 +105,7 @@ impl Render for List {
         // Update the list with the filtered applications.
         self.items = Self::filter(query, applications.list.clone());
 
-        if self.items.len() > 0 {
+        if !self.items.is_empty() {
             div().child(uniform_list(cx.entity().clone().clone(), "entries", self.items.len(), {
                 let list = self.items.clone();
                 move |_this, range, _window, cx| {

@@ -1,6 +1,6 @@
 use std::process::Command;
 
-use gpui::*;
+use gpui::{App, Global};
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
 
@@ -57,19 +57,16 @@ impl Applications {
 
         if let Some(app) = app {
             if let Some(existing_app_index) = applications.list.iter().position(|a| a.name == app.name) {
-                if let Some(_) = index_type {
+                if index_type.is_some() {
                     applications.list.remove(existing_app_index);
                 } else {
                     applications.list[existing_app_index].pid = 0;
                 }
             }
 
-            match index_type {
-                Some(index_type) => {
-                    let target_index = Self::get_index_from_type(&applications.list, applications.index, index_type);
-                    applications.list.insert(target_index, app.clone());
-                },
-                None => {}
+            if let Some(index_type) = index_type {
+                let target_index = Self::get_index_from_type(&applications.list, applications.index, index_type);
+                applications.list.insert(target_index, app.clone());
             }
         }
 
@@ -118,18 +115,15 @@ impl Applications {
             }
 
             // Handle events for non-running applications.
-            match action_type {
-                ActionType::Activate => {
-                    Self::update_list_entry(cx, Some(app), Some(IndexType::Start));
+            if let ActionType::Activate = action_type {
+                Self::update_list_entry(cx, Some(app), Some(IndexType::Start));
 
-                    let _ = Command::new("open").arg(app.path.as_str()).status();
-                },
-                _ => {}
+                let _ = Command::new("open").arg(app.path.as_str()).status();
             }
         }
     }
 
-    fn get_index_from_type(list: &Vec<Application>, current_index: usize, index_type: IndexType) -> usize {
+    fn get_index_from_type(list: &[Application], current_index: usize, index_type: IndexType) -> usize {
         match index_type {
             IndexType::Start => 0,
             IndexType::End => list.len(),
