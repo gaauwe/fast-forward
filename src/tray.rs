@@ -11,6 +11,7 @@ pub struct Tray {
 #[derive(Debug, Clone, Copy)]
 pub enum MenuId {
     Settings,
+    Logs,
     About,
     Quit,
 }
@@ -19,6 +20,7 @@ impl MenuId {
     fn as_str(&self) -> &'static str {
         match self {
             MenuId::Settings => "settings",
+            MenuId::Logs => "logs",
             MenuId::About => "about",
             MenuId::Quit => "quit",
         }
@@ -33,11 +35,13 @@ impl Tray {
         let menu = Menu::new();
 
         let settings_action = MenuItem::with_id(MenuId::Settings.as_str(), "Settings", true, None);
+        let logs_actions = MenuItem::with_id(MenuId::Logs.as_str(), "Logs", true, None);
         let about_action = MenuItem::with_id(MenuId::About.as_str(), "About Fast Forward", true, None);
         let quit_action = MenuItem::with_id(MenuId::Quit.as_str(), "Quit...", true, None);
 
         let _ = menu.append_items(&[
             &settings_action,
+            &logs_actions,
             &about_action,
             &quit_action
         ]);
@@ -54,6 +58,11 @@ impl Tray {
                 id if id == MenuId::Settings.as_str() => {
                     if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Settings)) {
                         error!("Failed to forward Settings event: {:?}", e);
+                    }
+                },
+                id if id == MenuId::Logs.as_str() => {
+                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Logs)) {
+                        error!("Failed to forward Logs event: {:?}", e);
                     }
                 },
                 id if id == MenuId::About.as_str() => {

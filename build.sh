@@ -115,3 +115,6 @@ echo "✨ Build complete! FastForward.dmg has been created and signed."
 echo "🔍 Verification information:"
 codesign -vv --deep --strict "${BUNDLE_DIR}"
 codesign -vv "FastForward.dmg"
+
+echo "🗑️ Removing the bundle directory..."
+rm -rf "${BUNDLE_DIR}"

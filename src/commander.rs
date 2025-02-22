@@ -30,6 +30,7 @@ pub enum HotkeyEvent {
 
 pub enum TrayEvent {
     Settings,
+    Logs,
     About,
     Quit,
 }
@@ -98,6 +99,14 @@ fn handle_tray_event(cx: &AsyncApp, event: TrayEvent) -> Result<(), Box<dyn std:
                 .arg("-a")
                 .arg("TextEdit")
                 .arg(&config_path)
+                .spawn()?;
+        }
+        TrayEvent::Logs => {
+            info!("Received event: TrayEvent::Logs");
+            std::process::Command::new("open")
+                .arg("-a")
+                .arg("Terminal")
+                .arg("tail -f -n100 ~/Library/Application\\ Support/FastForward/app.log")
                 .spawn()?;
         }
         TrayEvent::About => {
