@@ -3,6 +3,52 @@ import ApplicationServices
 import Cocoa
 import Foundation
 
+// Logger class to handle file logging
+class Logger {
+    static let shared = Logger()
+    private let fileHandle: FileHandle?
+    private let dateFormatter: DateFormatter
+    private let logQueue = DispatchQueue(label: "com.swift.monitor.logger")
+
+    private init() {
+        dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+
+        // Create logs directory if it doesn't exist
+        let fileManager = FileManager.default
+        let logDir = "/Users/gaauwe/Library/Application Support/FastForward"
+        let logPath = "\(logDir)/swift.log"
+
+        do {
+            try fileManager.createDirectory(atPath: logDir, withIntermediateDirectories: true)
+            if !fileManager.fileExists(atPath: logPath) {
+                fileManager.createFile(atPath: logPath, contents: nil)
+            }
+            fileHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: logPath))
+            fileHandle?.seekToEndOfFile()
+        } catch {
+            print("Failed to setup logging: \(error)")
+            fileHandle = nil
+        }
+    }
+
+    func log(_ message: String, level: String = "INFO") {
+        let timestamp = dateFormatter.string(from: Date())
+        let logMessage = "[\(timestamp)] [\(level)] \(message)\n"
+
+        logQueue.async { [weak self] in
+            print(logMessage, terminator: "")
+            if let data = logMessage.data(using: .utf8) {
+                self?.fileHandle?.write(data)
+            }
+        }
+    }
+
+    deinit {
+        try? fileHandle?.close()
+    }
+}
+
 let CGS_CONNECTION = CGSMainConnectionID()
 typealias CGSConnectionID = UInt32
 typealias CGSSpaceID = UInt64
@@ -35,8 +81,8 @@ class AppLifecycleMonitor: @unchecked Sendable {
     private let socketQueue = DispatchQueue(label: "com.swift.monitor.socketQueue")
     private var source: DispatchSourceRead?
 
-    private func log(_ message: Any) {
-        print(message)
+    private func log(_ message: Any, level: String = "INFO") {
+        Logger.shared.log("\(message)", level: level)
     }
 
     init() {
@@ -51,7 +97,7 @@ class AppLifecycleMonitor: @unchecked Sendable {
         // Create a new Unix domain socket
         socketFileDescriptor = socket(AF_UNIX, SOCK_STREAM, 0)
         guard socketFileDescriptor >= 0 else {
-            self.log("Failed to create socket with error: \(errno)")
+            self.log("Failed to create socket with error: \(errno)", level: "ERROR")
             fatalError("Failed to create socket")
         }
         self.log("Socket created: \(socketFileDescriptor)")
@@ -68,14 +114,15 @@ class AppLifecycleMonitor: @unchecked Sendable {
         }
 
         guard bindResult == 0 else {
-            self.log("Failed to bind socket with error: \(errno)")
+            self.log("Failed to bind socket with error: \(errno)", level: "ERROR")
             fatalError("Failed to bind socket")
         }
         print("Socket bound successfully")
         fflush(stdout)
+        self.log("Socket bound successfully")
 
         guard listen(socketFileDescriptor, 10) == 0 else {
-            self.log("Failed to listen on socket with error: \(errno)")
+            self.log("Failed to listen on socket with error: \(errno)", level: "ERROR")
             fatalError("Failed to listen on socket")
         }
         self.log("Listening on socket \(socketPath)")
@@ -86,8 +133,7 @@ class AppLifecycleMonitor: @unchecked Sendable {
         var _ = fcntl(socketFileDescriptor, F_SETFL, flags)
 
         // Use DispatchSource to handle incoming connections asynchronously
-        source = DispatchSource.makeReadSource(
-            fileDescriptor: socketFileDescriptor, queue: socketQueue)
+        source = DispatchSource.makeReadSource(fileDescriptor: socketFileDescriptor, queue: socketQueue)
         source?.setEventHandler { [weak self] in
             self?.acceptClientConnection()
         }
@@ -116,7 +162,7 @@ class AppLifecycleMonitor: @unchecked Sendable {
                 sendMessageToClient(message)
             } else {
                 if errno != EAGAIN {
-                    self.log("Failed to accept client with error: \(errno)")
+                    self.log("Failed to accept client with error: \(errno)", level: "ERROR")
                 }
             }
         }
@@ -151,12 +197,13 @@ class AppLifecycleMonitor: @unchecked Sendable {
                         if sentBytes < 0 {
                             let errorString = String(cString: strerror(errno))
                             if errno == EAGAIN || errno == EWOULDBLOCK {
-                                self.log("Send buffer full, retrying...")
+                                self.log("Send buffer full, retrying...", level: "WARN")
                                 usleep(100_000)  // Sleep for 100 milliseconds
                                 continue
                             } else {
                                 self.log(
-                                    "Failed to send data, sentBytes: \(sentBytes), error: \(errorString)"
+                                    "Failed to send data, sentBytes: \(sentBytes), error: \(errorString)",
+                                    level: "ERROR"
                                 )
                                 break
                             }
@@ -168,14 +215,14 @@ class AppLifecycleMonitor: @unchecked Sendable {
                     if totalBytesSent == combinedData.count {
                         self.log("All bytes sent successfully.")
                     } else {
-                        self.log("Warning: Not all bytes were sent.")
+                        self.log("Warning: Not all bytes were sent.", level: "WARN")
                     }
                 } else {
-                    self.log("No client connected, cannot send message.")
+                    self.log("No client connected, cannot send message.", level: "WARN")
                 }
             }
         } catch {
-            self.log("Failed to send message: \(error)")
+            self.log("Failed to send message: \(error)", level: "ERROR")
         }
     }
 
@@ -206,6 +253,8 @@ class AppLifecycleMonitor: @unchecked Sendable {
             name: NSWorkspace.didActivateApplicationNotification,
             object: nil
         )
+
+        self.log("Started listening for application events")
 
         // Start the run loop to keep the application running
         RunLoop.main.run()
@@ -456,6 +505,3 @@ extension List {
 // Start the app lifecycle monitor
 let monitor = AppLifecycleMonitor()
 print("Listening for app launch/close events...")
-
-// Keep the command-line tool running
-RunLoop.main.run()

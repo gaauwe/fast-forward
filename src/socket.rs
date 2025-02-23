@@ -6,6 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::process::{Child, Command};
+use tokio::time::{sleep, Duration};
 use anyhow::Context;
 use std::io::prelude::*;
 use prost::Message;
@@ -15,6 +16,7 @@ use crate::commander::{Commander, EventType};
 use crate::socket_message::SocketMessage;
 
 const SWIFT_BINARY: &[u8] = include_bytes!("../swift-lib/.build/release/swift-lib");
+const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 
 pub struct Socket {
     stream: UnixStream,
@@ -27,64 +29,67 @@ impl Socket {
         Self::listen_for_unix_socket_events(tx);
     }
 
+    async fn establish_connection() -> std::io::Result<(UnixStream, Child)> {
+        let socket_path = "/tmp/swift_monitor.sock";
+        let mut swift_monitor = Self::run_swift_monitor()?;
+
+        // TODO: Check if the socket file exists instead of waiting for a message
+        Self::wait_for_message(&mut swift_monitor, "Socket bound successfully").await?;
+        let stream = UnixStream::connect(socket_path).await?;
+
+        Ok((stream, swift_monitor))
+    }
+
     fn listen_for_unix_socket_events(tx: UnboundedSender<EventType>) {
         tokio::spawn(async move {
-            let socket_path = "/tmp/swift_monitor.sock";
-            let mut swift_monitor = match Self::run_swift_monitor() {
-                Ok(process) => process,
-                Err(e) => {
-                    error!("Failed to start Swift monitor: {e}");
-                    panic!("Failed to start Swift monitor: {e}");
-                }
-            };
-
-            Self::wait_for_message(&mut swift_monitor, "Socket bound successfully").await.ok();
-            let stream = match UnixStream::connect(socket_path).await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    error!("Failed to connect to socket: {e}");
-                    panic!("Failed to connect to socket: {e}");
-                }
-            };
-
-            let mut length_buffer = [0u8; 4];
-            let mut connection = Socket {
-                stream,
-                swift_monitor,
-            };
-
             loop {
-                match connection.stream.read_exact(&mut length_buffer).await {
-                    Ok(_) => {
-                        let message_length = u32::from_be_bytes(length_buffer) as usize;
-                        let mut message_buffer = vec![0u8; message_length];
+                let mut connection = match Self::establish_connection().await {
+                    Ok((stream, swift_monitor)) => Socket { stream, swift_monitor },
+                    Err(e) => {
+                        error!("Failed to establish connection: {e}");
+                        sleep(RECONNECT_DELAY).await;
+                        continue;
+                    }
+                };
 
-                        match connection.stream.read_exact(&mut message_buffer).await {
-                            Ok(_) => {
-                                match SocketMessage::decode(&*message_buffer) {
-                                    Ok(message) => {
-                                        if let Some(event) = message.event {
-                                            tx.send(EventType::SocketEvent(event)).expect("Failed to send event");
-                                        } else {
-                                            error!("Failed to get event from message");
+                let mut length_buffer = [0u8; 4];
+
+                loop {
+                    match connection.stream.read_exact(&mut length_buffer).await {
+                        Ok(_) => {
+                            let message_length = u32::from_be_bytes(length_buffer) as usize;
+                            let mut message_buffer = vec![0u8; message_length];
+
+                            match connection.stream.read_exact(&mut message_buffer).await {
+                                Ok(_) => {
+                                    match SocketMessage::decode(&*message_buffer) {
+                                        Ok(message) => {
+                                            if let Some(event) = message.event {
+                                                tx.send(EventType::SocketEvent(event)).expect("Failed to send event");
+                                            } else {
+                                                error!("Failed to get event from message");
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("Failed to decode message: {e}");
                                         }
                                     }
-                                    Err(e) => {
-                                        error!("Failed to decode message: {e}");
-                                    }
+                                }
+                                Err(e) => {
+                                    error!("Error while reading message from the socket: {e}");
+                                    break;
                                 }
                             }
-                            Err(e) => {
-                                error!("Error while reading message from the socket: {e}");
-                                break;
-                            }
+                        }
+                        Err(e) => {
+                            error!("Error while reading length from the socket: {e}");
+                            break;
                         }
                     }
-                    Err(e) => {
-                        error!("Error while reading length from the socket: {e}");
-                        break;
-                    }
                 }
+
+                error!("Connection lost, attempting to reconnect...");
+                sleep(RECONNECT_DELAY).await;
             }
         });
     }
