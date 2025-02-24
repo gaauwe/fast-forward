@@ -77,8 +77,10 @@ struct AppProperty: Codable {
 class AppLifecycleMonitor: @unchecked Sendable {
     private let socketPath = "/tmp/swift_monitor.sock"
     private var socketFileDescriptor: Int32 = -1
-    private var clientSocket: Int32 = -1  // Store the client socket
+    private let clientSocketLock = NSLock()
+    private var clientSocket: Int32 = -1
     private let socketQueue = DispatchQueue(label: "com.swift.monitor.socketQueue")
+
     private var source: DispatchSourceRead?
 
     private func log(_ message: Any, level: String = "INFO") {
@@ -133,15 +135,30 @@ class AppLifecycleMonitor: @unchecked Sendable {
         var _ = fcntl(socketFileDescriptor, F_SETFL, flags)
 
         // Use DispatchSource to handle incoming connections asynchronously
-        source = DispatchSource.makeReadSource(fileDescriptor: socketFileDescriptor, queue: socketQueue)
+        source = DispatchSource.makeReadSource(
+            fileDescriptor: socketFileDescriptor, queue: socketQueue)
         source?.setEventHandler { [weak self] in
             self?.acceptClientConnection()
         }
         source?.resume()
     }
 
+    private func handleClientDisconnect() {
+        clientSocketLock.lock()
+        defer { clientSocketLock.unlock() }
+
+        if clientSocket >= 0 {
+            close(clientSocket)
+            clientSocket = -1
+            log("Client disconnected, clientSocket reset.", level: "INFO")
+        }
+    }
+
     private func acceptClientConnection() {
         // Accept a new client connection if it's not already established
+        clientSocketLock.lock()
+        defer { clientSocketLock.unlock() }
+
         if clientSocket == -1 {
             let client = accept(self.socketFileDescriptor, nil, nil)
             if client >= 0 {
@@ -184,41 +201,45 @@ class AppLifecycleMonitor: @unchecked Sendable {
             socketQueue.async { [weak self] in
                 guard let self = self else { return }
 
-                // Check if there is a valid client socket
-                if self.clientSocket >= 0 {
-                    var totalBytesSent = 0
-                    while totalBytesSent < combinedData.count {
-                        let bytesLeft = combinedData.count - totalBytesSent
-                        let sentBytes = combinedData.withUnsafeBytes {
-                            send(
-                                self.clientSocket, $0.baseAddress!.advanced(by: totalBytesSent),
-                                bytesLeft, 0)
-                        }
-                        if sentBytes < 0 {
-                            let errorString = String(cString: strerror(errno))
-                            if errno == EAGAIN || errno == EWOULDBLOCK {
-                                self.log("Send buffer full, retrying...", level: "WARN")
-                                usleep(100_000)  // Sleep for 100 milliseconds
-                                continue
-                            } else {
-                                self.log(
-                                    "Failed to send data, sentBytes: \(sentBytes), error: \(errorString)",
-                                    level: "ERROR"
-                                )
-                                break
-                            }
-                        }
-                        totalBytesSent += sentBytes
-                        self.log("Sent \(sentBytes) bytes, total sent: \(totalBytesSent) bytes.")
-                    }
-
-                    if totalBytesSent == combinedData.count {
-                        self.log("All bytes sent successfully.")
-                    } else {
-                        self.log("Warning: Not all bytes were sent.", level: "WARN")
-                    }
-                } else {
+                self.clientSocketLock.lock()
+                guard self.clientSocket >= 0 else {
+                    self.clientSocketLock.unlock()
                     self.log("No client connected, cannot send message.", level: "WARN")
+                    return
+                }
+                let socket = self.clientSocket
+                self.clientSocketLock.unlock()
+
+                var totalBytesSent = 0
+                while totalBytesSent < combinedData.count {
+                    let bytesLeft = combinedData.count - totalBytesSent
+                    let sentBytes = combinedData.withUnsafeBytes {
+                        send(
+                            socket, $0.baseAddress!.advanced(by: totalBytesSent),
+                            bytesLeft, 0)
+                    }
+                    if sentBytes < 0 {
+                        let errorString = String(cString: strerror(errno))
+                        if errno == EAGAIN || errno == EWOULDBLOCK {
+                            self.log("Send buffer full, retrying...", level: "WARN")
+                            usleep(100_000)  // Sleep for 100 milliseconds
+                            continue
+                        } else {
+                            self.log(
+                                "Failed to send data, sentBytes: \(sentBytes), error: \(errorString)",
+                                level: "ERROR"
+                            )
+                            break
+                        }
+                    }
+                    totalBytesSent += sentBytes
+                    self.log("Sent \(sentBytes) bytes, total sent: \(totalBytesSent) bytes.")
+                }
+
+                if totalBytesSent == combinedData.count {
+                    self.log("All bytes sent successfully.")
+                } else {
+                    self.log("Warning: Not all bytes were sent.", level: "WARN")
                 }
             }
         } catch {
@@ -420,9 +441,7 @@ class AppLifecycleMonitor: @unchecked Sendable {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         source?.cancel()  // Cancel DispatchSource
         close(socketFileDescriptor)
-        if clientSocket >= 0 {
-            close(clientSocket)
-        }
+        handleClientDisconnect()
         // Remove the socket file
         unlink(socketPath)
     }
