@@ -106,7 +106,7 @@ impl Render for List {
         self.items = Self::filter(query, applications.list.clone());
 
         if !self.items.is_empty() {
-            div().child(uniform_list(cx.entity().clone().clone(), "entries", self.items.len(), {
+            div().child(uniform_list(cx.entity().clone(), "entries", self.items.len(), {
                 let list = self.items.clone();
                 move |_this, range, _window, cx| {
                     let theme = cx.global::<Theme>();

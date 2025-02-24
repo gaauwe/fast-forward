@@ -45,7 +45,7 @@ impl Container {
         let query = cx.global::<SearchQuery>().value.as_str();
 
         let list = List::filter(query, applications.list.clone());
-        let max_items = list.len();
+        let max_items = std::cmp::min(list.len(), 10);
 
         if max_items > 0 && self.trusted {
             return (max_items as f32 * LIST_ITEM_HEIGHT) + INPUT_HEIGHT + ACTION_BAR_HEIGHT;
