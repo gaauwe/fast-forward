@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use gpui::{Animation, AnimationExt, App, Context, Div, Element, InteractiveElement, IntoElement, ParentElement, Render, Styled, Transformation, Window, div, img, percentage, prelude, px, uniform_list};
+use gpui::{div, img, percentage, prelude, px, uniform_list, Animation, AnimationExt, App, Context, Div, Element, InteractiveElement, IntoElement, ParentElement, Render, ScrollStrategy, Styled, Transformation, UniformListScrollHandle, Window};
 use prelude::FluentBuilder;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
@@ -12,6 +12,7 @@ use super::{icon::{Icon, IconName}, input::SearchQuery};
 
 pub struct List {
     pub items: Vec<Application>,
+    list: UniformListScrollHandle,
 }
 
 impl List {
@@ -19,7 +20,8 @@ impl List {
         let applications = cx.global::<Applications>();
 
         Self {
-            items: applications.list.clone()
+            items: applications.list.clone(),
+            list: UniformListScrollHandle::new(),
         }
     }
 
@@ -90,6 +92,7 @@ impl Render for List {
 
         let index = applications.index;
         let loading = applications.loading;
+        self.list.scroll_to_item(index, ScrollStrategy::Top);
 
         if loading {
             return self.render_empty_state(
@@ -104,6 +107,7 @@ impl Render for List {
 
         // Update the list with the filtered applications.
         self.items = Self::filter(query, applications.list.clone());
+        let scroll_handle = self.list.clone();
 
         if !self.items.is_empty() {
             div().child(uniform_list(cx.entity().clone(), "entries", self.items.len(), {
@@ -135,7 +139,7 @@ impl Render for List {
                             .when(pid == 0, |cx| cx.opacity(0.6))
                     }).collect::<Vec<_>>()
                 }
-            }).h_full()).h_full()
+            }).h_full().track_scroll(scroll_handle)).h_full()
         } else {
             self.render_empty_state(theme, "No applications found")
         }.into_any()
