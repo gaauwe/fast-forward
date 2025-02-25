@@ -68,13 +68,13 @@ fn handle_socket_event(cx: &AsyncApp, event: SocketEvent) -> Result<(), Box<dyn 
             cx.update(|cx| Applications::update_list(cx, event.apps.clone()))?;
         }
         SocketEvent::Launch(event) => {
-            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start)))?;
+            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start), false))?;
         }
         SocketEvent::Close(event) => {
-            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), None))?;
+            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), None, false))?;
         }
         SocketEvent::Activate(event) => {
-            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start)))?;
+            cx.update(|cx| Applications::update_list_entry(cx, event.app.as_ref(), Some(IndexType::Start), false))?;
         }
     }
     Ok(())

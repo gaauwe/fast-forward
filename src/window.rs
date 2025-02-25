@@ -2,7 +2,7 @@ use core_graphics::display::{CGDisplay, CGPoint};
 use gpui::{App, AppContext, Bounds, DisplayId, Global, Pixels, Point, Size, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions};
 use mouse_position::mouse_position::Mouse;
 
-use crate::{applications::{Applications, IndexType}, ui::{input::SearchQuery, Container}};
+use crate::ui::Container;
 
 pub struct Window {
     pub window: WindowHandle<Container>,
@@ -63,58 +63,38 @@ impl Window {
     }
 
     pub fn show(cx: &mut App) {
+        Self::close(cx);
+
         let display_id = cx.global::<Self>().display_id;
         let active_display_id = Self::get_active_display_id(cx);
 
-        // If the display has changed, close the current window and open a new one.
+        // Delay the opening of the window to prevent flickering.
         if display_id != active_display_id {
-            Self::close(cx);
-
-            // Delay the opening of the window to prevent flickering.
             cx.spawn(|cx| async move {
                 cx.background_executor().timer(std::time::Duration::from_millis(0)).await;
                 cx.update(|cx| {
                     Self::new(cx);
                 })
             }).detach();
+        } else {
+            Self::new(cx);
         }
 
-        let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, _window, cx| {
+        let _ = cx.global::<Window>().window.clone().update(cx, |_view, _window, cx| {
             cx.activate(true);
-        }).ok();
+        });
     }
 
     pub fn hide(cx: &mut App) {
-        // Hide the window and reset the input field.
-        let window = cx.global::<Window>();
-        window.window.clone().update(cx, |view, _window, cx| {
+        let _ = cx.global::<Window>().window.clone().update(cx, |_view, _window, cx| {
             cx.hide();
-
-
-            view.input.update(cx, |input, _cx| {
-                input.value = "".into();
-            });
-            cx.notify();
-        }).ok();
-
-        // Clear the search query when the window is hidden (after a short delay).
-        cx.spawn(|cx| async move {
-            cx.background_executor().timer(std::time::Duration::from_millis(0)).await;
-            cx.update(|cx| {
-                cx.set_global(SearchQuery { value: String::new() });
-            })
-        }).detach();
-
-        // Reset the active index when the window is hidden.
-        Applications::update_active_index(cx, IndexType::Start);
+        });
     }
 
     pub fn close(cx: &mut App) {
-        let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, window, _cx| {
+        let _ = cx.global::<Window>().window.clone().update(cx, |_view, window, _cx| {
             window.remove_window();
-        }).ok();
+        });
     }
 
     fn get_active_display_id(cx: &mut App) -> DisplayId {

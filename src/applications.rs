@@ -66,7 +66,7 @@ impl Applications {
         cx.set_global(applications);
     }
 
-    pub fn update_list_entry(cx: &mut App, app: Option<&Application>, index_type: Option<IndexType>) {
+    pub fn update_list_entry(cx: &mut App, app: Option<&Application>, index_type: Option<IndexType>, reset: bool) {
         let applications = cx.global::<Applications>();
         let mut applications = applications.clone();
 
@@ -88,8 +88,10 @@ impl Applications {
         cx.set_global(applications);
 
         // Reset the active index and search query.
-        Self::update_active_index(cx, IndexType::Start);
-        cx.set_global(SearchQuery { value: String::new() });
+        if reset {
+            Self::update_active_index(cx, IndexType::Start);
+            cx.set_global(SearchQuery { value: String::new() });
+        }
     }
 
     pub fn execute_action(cx: &mut App, action_type: ActionType) {
@@ -106,35 +108,35 @@ impl Applications {
             if let Some(native_app) = native_app {
                 match action_type {
                     ActionType::Activate => {
-                        Self::update_list_entry(cx, Some(app), Some(IndexType::Start));
+                        Self::update_list_entry(cx, Some(app), Some(IndexType::Start), false);
 
                         unsafe {
                             native_app.activateWithOptions(NSApplicationActivationOptions::empty());
                         }
                     },
                     ActionType::Hide => {
-                        Self::update_list_entry(cx, Some(app), Some(IndexType::End));
+                        Self::update_list_entry(cx, Some(app), Some(IndexType::End), true);
 
                         unsafe {
                             native_app.hide();
                         }
                     },
                     ActionType::Quit => {
-                        Self::update_list_entry(cx, Some(app), None);
+                        Self::update_list_entry(cx, Some(app), None, true);
 
                         unsafe {
                             native_app.terminate();
                         }
                     }
                 }
-            }
+            } else {
+                // Handle events for non-running applications.
+                if let ActionType::Activate = action_type {
+                    Self::update_list_entry(cx, Some(app), Some(IndexType::Start), true);
 
-            // Handle events for non-running applications.
-            if let ActionType::Activate = action_type {
-                Self::update_list_entry(cx, Some(app), Some(IndexType::Start));
-
-                if let Err(err) = Command::new("open").arg(&app.path).status() {
-                    error!("Failed to open application at {}: {}", app.path, err);
+                    if let Err(err) = Command::new("open").arg(&app.path).status() {
+                        error!("Failed to open application at {}: {}", app.path, err);
+                    }
                 }
             }
         }
