@@ -12,7 +12,6 @@ pub struct Tray {
 #[derive(Debug, Clone, Copy)]
 pub enum MenuId {
     Settings,
-    Logs,
     About,
     Quit,
 }
@@ -21,7 +20,6 @@ impl MenuId {
     fn as_str(&self) -> &'static str {
         match self {
             MenuId::Settings => "settings",
-            MenuId::Logs => "logs",
             MenuId::About => "about",
             MenuId::Quit => "quit",
         }
@@ -35,16 +33,10 @@ impl Tray {
         let icon = Self::load_icon();
         let menu = Menu::new();
 
-        let settings_action = MenuItem::with_id(MenuId::Settings.as_str(), "Settings", true, None);
-        let logs_actions = MenuItem::with_id(MenuId::Logs.as_str(), "Logs", true, None);
-        let about_action = MenuItem::with_id(MenuId::About.as_str(), "About Fast Forward", true, None);
-        let quit_action = MenuItem::with_id(MenuId::Quit.as_str(), "Quit...", true, None);
-
         let _ = menu.append_items(&[
-            &settings_action,
-            &logs_actions,
-            &about_action,
-            &quit_action
+            &MenuItem::with_id(MenuId::Settings.as_str(), "Settings", true, None),
+            &MenuItem::with_id(MenuId::About.as_str(), "About Fast Forward", true, None),
+            &MenuItem::with_id(MenuId::Quit.as_str(), "Quit...", true, None),
         ]);
 
         let tray = TrayIconBuilder::new()
@@ -56,7 +48,6 @@ impl Tray {
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
             match event.id.0.as_str() {
                 id if id == MenuId::Settings.as_str() => Self::send_tray_event(&tx, TrayEvent::Settings),
-                id if id == MenuId::Logs.as_str() => Self::send_tray_event(&tx, TrayEvent::Logs),
                 id if id == MenuId::About.as_str() => Self::send_tray_event(&tx, TrayEvent::About),
                 id if id == MenuId::Quit.as_str() => Self::send_tray_event(&tx, TrayEvent::Quit),
                 _ => {}
