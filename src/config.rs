@@ -1,3 +1,4 @@
+use log::error;
 use crate::theme::{Theme, ThemeConfig};
 use anyhow::{Context, Result};
 use gpui::{App, Global};
@@ -10,20 +11,20 @@ pub struct TomlConfig {
     pub theme: ThemeConfig
 }
 
-#[derive(Debug, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Deserialize, Default)]
 pub struct Config {
     pub theme: Theme,
 }
 
 impl Config {
     pub fn new(cx: &mut App) {
-        let config = Config::load().unwrap_or_else(|err| {
-            eprintln!("Failed to load configuration: {err}");
-            Config::default()
-        });
-
-        cx.set_global(config);
+        match Config::load() {
+            Ok(config) => cx.set_global(config),
+            Err(e) => {
+                error!("Failed to load configuration: {e}");
+                cx.set_global(Config::default());
+            }
+        }
     }
 
     fn load() -> Result<Self> {
@@ -33,14 +34,24 @@ impl Config {
             return Ok(Self::default());
         }
 
-        let content = fs::read_to_string(&config_path)
-            .with_context(|| format!("Failed to read config file at {config_path:?}"))?;
+        let content = Self::read_config_file(&config_path)?;
+        let config = Self::parse_config(&content, &config_path)?;
+        Ok(Self::build_config(config))
+    }
 
-        let config: TomlConfig = toml::from_str(&content)
-            .with_context(|| format!("Failed to parse config file at {config_path:?}"))?;
+    fn read_config_file(config_path: &Path) -> Result<String> {
+        fs::read_to_string(config_path)
+            .with_context(|| format!("Failed to read config file at {config_path:?}"))
+    }
 
+    fn parse_config(content: &str, config_path: &Path) -> Result<TomlConfig> {
+        toml::from_str(content)
+            .with_context(|| format!("Failed to parse config file at {config_path:?}"))
+    }
+
+    fn build_config(config: TomlConfig) -> Self {
         let default_theme = Theme::default();
-        let result = Self {
+        Self {
             theme: Theme {
                 primary: config.theme.primary.map_or(default_theme.primary, Into::into),
                 background: config.theme.background.map_or(default_theme.background, Into::into),
@@ -49,16 +60,15 @@ impl Config {
                 muted_foreground: config.theme.muted_foreground.map_or(default_theme.muted_foreground, Into::into),
                 border: config.theme.border.map_or(default_theme.border, Into::into),
             }
-        };
-
-        Ok(result)
+        }
     }
 
     fn create_example_config(config_path: &Path) -> Result<()> {
         let example_config = include_str!("../assets/config.toml");
+
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)
-                .context("Failed to create config directory")?;
+                .with_context(|| format!("Failed to create config directory at {parent:?}"))?;
         }
 
         fs::write(config_path, example_config)
