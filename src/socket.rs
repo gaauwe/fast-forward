@@ -29,6 +29,32 @@ impl Socket {
         Self::listen_for_unix_socket_events(tx);
     }
 
+    fn listen_for_unix_socket_events(tx: UnboundedSender<EventType>) {
+        tokio::spawn(async move {
+            loop {
+                match Self::handle_connection(&tx).await {
+                    Ok(()) => (),
+                    Err(e) => {
+                        error!("Connection error: {e}");
+                        sleep(RECONNECT_DELAY).await;
+                    }
+                }
+            }
+        });
+    }
+
+    async fn handle_connection(tx: &UnboundedSender<EventType>) -> std::io::Result<()> {
+        let (stream, swift_monitor) = Self::establish_connection().await?;
+        let mut connection = Socket { stream, swift_monitor };
+
+        loop {
+            if let Err(e) = Self::handle_message(&mut connection, tx).await {
+                error!("Message handling error: {e}");
+                return Err(e);
+            }
+        }
+    }
+
     async fn establish_connection() -> std::io::Result<(UnixStream, Child)> {
         let socket_path = "/tmp/swift_monitor.sock";
         let mut swift_monitor = Self::run_swift_monitor()?;
@@ -40,58 +66,35 @@ impl Socket {
         Ok((stream, swift_monitor))
     }
 
-    fn listen_for_unix_socket_events(tx: UnboundedSender<EventType>) {
-        tokio::spawn(async move {
-            loop {
-                let mut connection = match Self::establish_connection().await {
-                    Ok((stream, swift_monitor)) => Socket { stream, swift_monitor },
-                    Err(e) => {
-                        error!("Failed to establish connection: {e}");
-                        sleep(RECONNECT_DELAY).await;
-                        continue;
-                    }
-                };
+    async fn handle_message(connection: &mut Socket, tx: &UnboundedSender<EventType>) -> std::io::Result<()> {
+        let message = Self::read_message(connection).await?;
+        Self::process_message(message, tx)?;
+        Ok(())
+    }
 
-                let mut length_buffer = [0u8; 4];
+    async fn read_message(connection: &mut Socket) -> std::io::Result<SocketMessage> {
+        let mut length_buffer = [0u8; 4];
+        connection.stream.read_exact(&mut length_buffer).await?;
 
-                loop {
-                    match connection.stream.read_exact(&mut length_buffer).await {
-                        Ok(_) => {
-                            let message_length = u32::from_be_bytes(length_buffer) as usize;
-                            let mut message_buffer = vec![0u8; message_length];
+        let message_length = u32::from_be_bytes(length_buffer) as usize;
+        let mut message_buffer = vec![0u8; message_length];
+        connection.stream.read_exact(&mut message_buffer).await?;
 
-                            match connection.stream.read_exact(&mut message_buffer).await {
-                                Ok(_) => {
-                                    match SocketMessage::decode(&*message_buffer) {
-                                        Ok(message) => {
-                                            if let Some(event) = message.event {
-                                                tx.send(EventType::SocketEvent(event)).expect("Failed to send event");
-                                            } else {
-                                                error!("Failed to get event from message");
-                                            }
-                                        }
-                                        Err(e) => {
-                                            error!("Failed to decode message: {e}");
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Error while reading message from the socket: {e}");
-                                    break;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            error!("Error while reading length from the socket: {e}");
-                            break;
-                        }
-                    }
-                }
+        SocketMessage::decode(&*message_buffer)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+    }
 
-                error!("Connection lost, attempting to reconnect...");
-                sleep(RECONNECT_DELAY).await;
+    fn process_message(message: SocketMessage, tx: &UnboundedSender<EventType>) -> std::io::Result<()> {
+        match message.event {
+            Some(event) => {
+                tx.send(EventType::SocketEvent(event))
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                Ok(())
             }
-        });
+            None => {
+                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Message missing event"))
+            }
+        }
     }
 
     async fn wait_for_message(child: &mut Child, message: &str) -> std::io::Result<()> {
