@@ -1,5 +1,6 @@
 use gpui::{App, Global};
-use log::{info, error};
+use log::error;
+use tokio::sync::mpsc::UnboundedSender;
 use tray_icon::{menu::{Menu, MenuEvent, MenuItem}, TrayIcon, TrayIconBuilder};
 
 use crate::commander::{Commander, EventType, TrayEvent};
@@ -53,28 +54,11 @@ impl Tray {
             .unwrap();
 
         MenuEvent::set_event_handler(Some(move |event: MenuEvent| {
-            info!("Sending event: {:?}", event);
             match event.id.0.as_str() {
-                id if id == MenuId::Settings.as_str() => {
-                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Settings)) {
-                        error!("Failed to forward Settings event: {:?}", e);
-                    }
-                },
-                id if id == MenuId::Logs.as_str() => {
-                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Logs)) {
-                        error!("Failed to forward Logs event: {:?}", e);
-                    }
-                },
-                id if id == MenuId::About.as_str() => {
-                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::About)) {
-                        error!("Failed to forward About event: {:?}", e);
-                    }
-                },
-                id if id == MenuId::Quit.as_str() => {
-                    if let Err(e) = tx.send(EventType::TrayEvent(TrayEvent::Quit)) {
-                        error!("Failed to forward Quit event: {:?}", e);
-                    }
-                },
+                id if id == MenuId::Settings.as_str() => Self::send_tray_event(&tx, TrayEvent::Settings),
+                id if id == MenuId::Logs.as_str() => Self::send_tray_event(&tx, TrayEvent::Logs),
+                id if id == MenuId::About.as_str() => Self::send_tray_event(&tx, TrayEvent::About),
+                id if id == MenuId::Quit.as_str() => Self::send_tray_event(&tx, TrayEvent::Quit),
                 _ => {}
             }
         }));
@@ -84,23 +68,26 @@ impl Tray {
         });
     }
 
+    fn send_tray_event(tx: &UnboundedSender<EventType>, event: TrayEvent) {
+        if let Err(e) = tx.send(EventType::TrayEvent(event)) {
+            error!("Failed to forward tray event: {:?}", e);
+        }
+    }
+
     fn load_icon() -> tray_icon::Icon {
-        let (icon_rgba, icon_width, icon_height) = {
-            let icon_bytes = include_bytes!("../assets/tray_icon.png");
-            let image = image::load_from_memory(icon_bytes)
-                .unwrap_or_else(|e| {
-                    error!("Failed to open icon path: {:?}", e);
-                    panic!("Failed to open icon");
-                })
-                .into_rgba8();
-            let (width, height) = image.dimensions();
-            let rgba = image.into_raw();
-            (rgba, width, height)
-        };
-        tray_icon::Icon::from_rgba(icon_rgba, icon_width, icon_height)
+        let icon_bytes = include_bytes!("../assets/tray_icon.png");
+        let image = image::load_from_memory(icon_bytes)
             .unwrap_or_else(|e| {
-                error!("Failed to open icon: {:?}", e);
-                panic!("Failed to open icon");
+                panic!("Failed to load icon: {:?}", e);
+            })
+            .into_rgba8();
+
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+
+        tray_icon::Icon::from_rgba(rgba, width, height)
+            .unwrap_or_else(|e| {
+                panic!("Failed to create icon: {:?}", e);
             })
     }
 }
