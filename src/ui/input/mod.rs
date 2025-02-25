@@ -41,7 +41,7 @@ pub struct TextInput {
 // Mostly copied from the TextInput example in the gpui repository, with some modifications.
 // - https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 impl TextInput {
-    pub fn new( window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let focus_handle = cx.focus_handle();
         let blink_cursor = cx.new(|_| BlinkCursor::new());
 
@@ -58,17 +58,12 @@ impl TextInput {
         };
 
         // Observe the blink cursor to repaint the view when it changes.
-        cx.observe(&input.blink_cursor, |_, _, cx| cx.notify())
-            .detach();
+        cx.observe(&input.blink_cursor, |_, _, cx| cx.notify()).detach();
+
         // Blink the cursor when the window is active, pause when it's not.
         cx.observe_window_activation(window, |input, window, cx| {
             if window.is_window_active() {
-                // TODO: This is a hack to clear the search query when the window is re-activated.
-                input.value = "".into();
-                input.selected_range = 0..0;
-
-                let focus_handle = input.focus_handle.clone();
-                if focus_handle.is_focused(window) {
+                if input.focus_handle.clone().is_focused(window) {
                     input.blink_cursor.update(cx, |blink_cursor, cx| {
                         blink_cursor.start(cx);
                     });
@@ -78,10 +73,8 @@ impl TextInput {
                     blink_cursor.stop(cx);
                 });
             }
-        })
-        .detach();
+        }).detach();
 
-        // Attach key listeners.
         cx.bind_keys([
             KeyBinding::new("tab", Tab, None),
             // TODO: Shift+Tab isn't recognized yet.
@@ -95,7 +88,19 @@ impl TextInput {
             value: String::new()
         });
 
+        cx.observe_global::<SearchQuery>(|input, cx| {
+            if cx.global::<SearchQuery>().value.is_empty() {
+                input.clear(cx);
+            }
+        }).detach();
+
         input
+    }
+
+    fn clear(&mut self, cx: &mut Context<Self>) {
+        self.value = "".into();
+        self.selected_range = 0..0;
+        cx.notify();
     }
 
     fn left(&mut self, _: &Left, _window: &mut Window, cx: &mut Context<Self>) {

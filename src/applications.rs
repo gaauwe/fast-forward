@@ -1,6 +1,7 @@
 use std::process::Command;
 
 use gpui::{App, Global};
+use log::error;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
 
@@ -9,18 +10,31 @@ use crate::window::Window;
 use crate::socket_message::App as Application;
 use crate::ui::list::List;
 
+#[derive(Debug, Clone)]
 pub struct Applications {
     pub list: Vec<Application>,
     pub index: usize,
     pub loading: bool,
 }
 
+impl Default for Applications {
+    fn default() -> Self {
+        Self {
+            list: Vec::new(),
+            index: 0,
+            loading: true
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum ActionType {
     Activate,
     Hide,
     Quit
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum IndexType {
     Start,
     End,
@@ -30,14 +44,15 @@ pub enum IndexType {
 
 impl Applications {
     pub fn new(cx: &mut App) {
-        let list = Vec::new();
-        let applications = Self { list, index: 0, loading: true };
-        cx.set_global(applications);
+        cx.set_global(Self::default());
     }
 
     pub fn update_list(cx: &mut App, list: Vec<Application>) {
-        let applications = Self { list, index: 0, loading: false };
-        cx.set_global(applications);
+        cx.set_global(Self {
+            list,
+            index: 0,
+            loading: false
+        });
     }
 
     pub fn update_active_index(cx: &mut App, index_type: IndexType) {
@@ -72,9 +87,9 @@ impl Applications {
 
         cx.set_global(applications);
 
-        // Re-render the list after the order has changed.
-        let window = cx.global::<Window>();
-        window.window.clone().update(cx, |_view, _window, cx| cx.notify()).ok();
+        // Reset the active index and search query.
+        Self::update_active_index(cx, IndexType::Start);
+        cx.set_global(SearchQuery { value: String::new() });
     }
 
     pub fn execute_action(cx: &mut App, action_type: ActionType) {
@@ -118,7 +133,9 @@ impl Applications {
             if let ActionType::Activate = action_type {
                 Self::update_list_entry(cx, Some(app), Some(IndexType::Start));
 
-                let _ = Command::new("open").arg(app.path.as_str()).status();
+                if let Err(err) = Command::new("open").arg(&app.path).status() {
+                    error!("Failed to open application at {}: {}", app.path, err);
+                }
             }
         }
     }
@@ -147,13 +164,3 @@ impl Applications {
 }
 
 impl Global for Applications {}
-
-impl Clone for Applications {
-    fn clone(&self) -> Self {
-        Self {
-            list: self.list.clone(),
-            index: self.index,
-            loading: self.loading
-        }
-    }
-}
