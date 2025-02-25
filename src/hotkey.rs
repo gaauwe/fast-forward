@@ -1,25 +1,26 @@
 use gpui::{App, Global};
-use log::{info, error};
+use log::error;
+use tokio::sync::mpsc::UnboundedSender;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 
-use crate::commander::{Commander, EventType, HotkeyEvent};
+use crate::{commander::{Commander, EventType, HotkeyEvent}, window::Window};
 
 static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
 static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
 static SPACE_PRESSED: AtomicBool = AtomicBool::new(false);
 
-pub struct Hotkey {
-    _tap: CGEventTap<'static>,
-    _loop_source: CFRunLoopSource,
-}
-
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
+    /// Right Command key (keycode 54)
     RightCommand = 54,
+    /// Escape key (keycode 53)
     Escape = 53,
+    /// Space key (keycode 49)
     Space = 49,
+    /// Any other key
     Other
 }
 
@@ -34,10 +35,14 @@ impl From<i64> for Key {
     }
 }
 
+pub struct Hotkey {
+    _tap: CGEventTap<'static>,
+    _loop_source: CFRunLoopSource,
+}
 
 impl Hotkey {
     pub fn new(cx: &mut App) {
-        let tx = cx.global::<Commander>().tx.clone();
+        let handler = EventHandler::new(cx.global::<Commander>().tx.clone());
         let current = CFRunLoop::get_current();
         let tap = CGEventTap::new(
             CGEventTapLocation::Session,
@@ -51,62 +56,23 @@ impl Hotkey {
 
                 match event_type {
                     CGEventType::FlagsChanged => {
-                        if keycode == Key::RightCommand as i64 {
-                            let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
-                            if right_cmd_is_down {
-                                info!("Sent event: HotkeyEvent::ShowWindow");
-                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::ShowWindow)) {
-                                    error!("Failed to send ShowWindow event: {:?}", e);
-                                }
-                            } else {
-                                info!("Sent event: HotkeyEvent::HideWindow");
-                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::HideWindow)) {
-                                    error!("Failed to send HideWindow event: {:?}", e);
-                                }
-                            }
-
-                            RIGHT_CMD_IS_DOWN.store(right_cmd_is_down, Ordering::SeqCst);
+                        if let Some(hotkey_event) = handler.handle_flags_changed(keycode, flags) {
+                            handler.send_event(hotkey_event);
                         }
                     },
                     CGEventType::KeyDown => {
-                        // If the event is a right command key press, block it (since that's our trigger).
+                        // Block right command key events.
                         if keycode == Key::RightCommand as i64 {
                             new_event.set_type(CGEventType::Null);
                         }
 
-                        // Early return if command is not down (and therefore our application isn't active).
-                        if !RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
-                            return Some(new_event);
-                        }
-
-                        // Remove the command key from the flags, so that it acts as a normal key press.
-                        flags.remove(CGEventFlags::CGEventFlagCommand);
-                        new_event.set_flags(flags);
-
-                        match Key::from(keycode) {
-                            Key::Escape => {
-                                info!("Sent event: HotkeyEvent::QuitApplication");
-                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::QuitApplication)) {
-                                    error!("Failed to send QuitApplication event: {:?}", e);
-                                }
-
+                        if let Some((hotkey_event, should_block)) = handler.handle_key_down(keycode, &mut flags) {
+                            handler.send_event(hotkey_event);
+                            if should_block {
                                 new_event.set_type(CGEventType::Null);
-                                ESCAPE_PRESSED.store(true, Ordering::SeqCst);
-                            },
-                            Key::Space => {
-                                info!("Sent event: HotkeyEvent::HideApplication");
-                                if let Err(e) = tx.send(EventType::HotkeyEvent(HotkeyEvent::HideApplication)) {
-                                    error!("Failed to send HideApplication event: {:?}", e);
-                                }
-
-                                new_event.set_type(CGEventType::Null);
-                                SPACE_PRESSED.store(true, Ordering::SeqCst);
-                            },
-                            _ => {
-                                SPACE_PRESSED.store(false, Ordering::SeqCst);
-                                ESCAPE_PRESSED.store(false, Ordering::SeqCst);
                             }
                         }
+                        new_event.set_flags(flags);
                     },
                     _ => {}
                 }
@@ -114,21 +80,29 @@ impl Hotkey {
                 Some(new_event)
             },
         ).unwrap_or_else(|e| {
-            error!("Failed to create event tap: {:?}", e);
-            panic!("Failed to create event tap");
+            panic!("Failed to create event tap: {:?}", e);
         });
 
         let loop_source = tap.mach_port
             .create_runloop_source(0)
             .unwrap_or_else(|e| {
-                error!("Failed to create runloop source: {:?}", e);
-                panic!("Failed to create runloop source");
+                panic!("Failed to create runloop source: {:?}", e);
             });
 
         unsafe {
             current.add_source(&loop_source, kCFRunLoopCommonModes);
             tap.enable();
         }
+
+        // Trap focus as long as the command key is pressed.
+        let _ = cx.global::<Window>().window.clone().update(cx, |_view, window, cx| {
+            cx.observe_window_activation(window, |_input, window, cx| {
+                if !window.is_window_active() && RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+                    cx.activate(true);
+                }
+            }).detach();
+        });
+
 
         cx.set_global(Self {
             _tap: tap,
@@ -138,3 +112,60 @@ impl Hotkey {
 }
 
 impl Global for Hotkey {}
+
+
+struct EventHandler {
+    tx: UnboundedSender<EventType>,
+}
+
+impl EventHandler {
+    fn new(tx: UnboundedSender<EventType>) -> Self {
+        Self { tx }
+    }
+
+    fn handle_flags_changed(&self, keycode: i64, flags: CGEventFlags) -> Option<HotkeyEvent> {
+        if keycode == Key::RightCommand as i64 {
+            let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
+            RIGHT_CMD_IS_DOWN.store(right_cmd_is_down, Ordering::SeqCst);
+            Some(if right_cmd_is_down {
+                HotkeyEvent::ShowWindow
+            } else {
+                HotkeyEvent::HideWindow
+            })
+        } else {
+            None
+        }
+    }
+
+    fn handle_key_down(&self, keycode: i64, flags: &mut CGEventFlags) -> Option<(HotkeyEvent, bool)> {
+        // Early return if command is not down.
+        if !RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+            return None;
+        }
+
+        // Remove command flag for normal key press behavior, as they should be handled as normal key events.
+        flags.remove(CGEventFlags::CGEventFlagCommand);
+
+        match Key::from(keycode) {
+            Key::Escape => {
+                ESCAPE_PRESSED.store(true, Ordering::SeqCst);
+                Some((HotkeyEvent::QuitApplication, true))
+            },
+            Key::Space => {
+                SPACE_PRESSED.store(true, Ordering::SeqCst);
+                Some((HotkeyEvent::HideApplication, true))
+            },
+            _ => {
+                SPACE_PRESSED.store(false, Ordering::SeqCst);
+                ESCAPE_PRESSED.store(false, Ordering::SeqCst);
+                None
+            }
+        }
+    }
+
+    fn send_event(&self, event: HotkeyEvent) {
+        if let Err(e) = self.tx.send(EventType::HotkeyEvent(event)) {
+            error!("Failed to send event {:?}: {:?}", event, e);
+        }
+    }
+}

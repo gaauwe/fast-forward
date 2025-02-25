@@ -21,6 +21,7 @@ pub enum EventType {
     SocketEvent(SocketEvent),
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum HotkeyEvent {
     ShowWindow,
     HideWindow,
@@ -28,6 +29,7 @@ pub enum HotkeyEvent {
     QuitApplication,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum TrayEvent {
     Settings,
     Logs,
