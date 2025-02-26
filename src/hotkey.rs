@@ -1,4 +1,4 @@
-use gpui::{App, AppContext, Global};
+use gpui::{App, Global};
 use log::error;
 use tokio::sync::mpsc::UnboundedSender;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 
-use crate::{commander::{Commander, EventType, HotkeyEvent}, window::Window};
+use crate::commander::{Commander, EventType, HotkeyEvent};
 
 pub static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
 pub static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);

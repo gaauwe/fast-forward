@@ -2,7 +2,7 @@ use core_graphics::display::{CGDisplay, CGPoint};
 use gpui::{App, AppContext, Bounds, DisplayId, Global, Pixels, Point, Size, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions};
 use mouse_position::mouse_position::Mouse;
 
-use crate::ui::Container;
+use crate::{applications::{Applications, IndexType}, ui::Container};
 
 pub struct Window {
     pub window: WindowHandle<Container>,
@@ -52,7 +52,6 @@ impl Window {
         window
             .update(cx, |view, window, cx| {
                 cx.focus_view(&view.input, window);
-                cx.activate(true);
             })
             .unwrap();
 
@@ -64,6 +63,9 @@ impl Window {
 
     pub fn show(cx: &mut App) {
         Self::close(cx);
+
+        // Reset the selected application before showing the window.
+        Applications::update_active_index(cx, IndexType::Start);
 
         let display_id = cx.global::<Self>().display_id;
         let active_display_id = Self::get_active_display_id(cx);
@@ -79,10 +81,6 @@ impl Window {
         } else {
             Self::new(cx);
         }
-
-        let _ = cx.global::<Window>().window.clone().update(cx, |_view, _window, cx| {
-            cx.activate(true);
-        });
     }
 
     pub fn hide(cx: &mut App) {
