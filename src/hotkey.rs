@@ -1,4 +1,4 @@
-use gpui::{App, Global};
+use gpui::{App, AppContext, Global};
 use log::error;
 use tokio::sync::mpsc::UnboundedSender;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -8,9 +8,9 @@ use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEvent
 
 use crate::{commander::{Commander, EventType, HotkeyEvent}, window::Window};
 
-static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
-static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
-static SPACE_PRESSED: AtomicBool = AtomicBool::new(false);
+pub static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
+pub static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
+pub static SPACE_PRESSED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
@@ -42,7 +42,7 @@ pub struct Hotkey {
 
 impl Hotkey {
     pub fn new(cx: &mut App) {
-        let handler = EventHandler::new(cx.global::<Commander>().tx.clone());
+        let handler = EventHandler::new(cx);
         let current = CFRunLoop::get_current();
         let tap = CGEventTap::new(
             CGEventTapLocation::Session,
@@ -94,16 +94,6 @@ impl Hotkey {
             tap.enable();
         }
 
-        // Trap focus as long as the command key is pressed.
-        let _ = cx.global::<Window>().window.clone().update(cx, |_view, window, cx| {
-            cx.observe_window_activation(window, |_input, window, cx| {
-                if !window.is_window_active() && RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
-                    cx.activate(true);
-                }
-            }).detach();
-        });
-
-
         cx.set_global(Self {
             _tap: tap,
             _loop_source: loop_source,
@@ -119,7 +109,9 @@ struct EventHandler {
 }
 
 impl EventHandler {
-    fn new(tx: UnboundedSender<EventType>) -> Self {
+    fn new(cx: &mut App) -> Self {
+        let tx = cx.global::<Commander>().tx.clone();
+
         Self { tx }
     }
 

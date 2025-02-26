@@ -1,13 +1,13 @@
 mod blink_cursor;
 
-use std::ops::Range;
+use std::{ops::Range, sync::atomic::Ordering};
 use blink_cursor::BlinkCursor;
 use gpui::{
     actions, div, fill, point, prelude::*, px, relative, size, App, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{applications::{Applications, IndexType}, theme::Theme};
+use crate::{applications::{Applications, IndexType}, hotkey::RIGHT_CMD_IS_DOWN, theme::Theme};
 
 actions!(
     text_input,
@@ -73,12 +73,16 @@ impl TextInput {
                     blink_cursor.stop(cx);
                 });
             }
+
+            // Trap focus as long as the command key is pressed.
+            if RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+                cx.activate(true);
+            }
         }).detach();
 
         cx.bind_keys([
             KeyBinding::new("tab", Tab, None),
-            // TODO: Shift+Tab isn't recognized yet.
-            KeyBinding::new("shift-tab", Tab, None),
+            KeyBinding::new("shift-tab", ShiftTab, None),
             KeyBinding::new("backspace", Backspace, None),
             KeyBinding::new("left", Left, None),
             KeyBinding::new("right", Right, None),
