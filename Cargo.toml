@@ -1,18 +1,19 @@
 [package]
 name = "fast-forward"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 
-[package.metadata.bundle]
-name = "Fast Foward"
+[package.metadata.packager]
+product_name = "Fast Forward"
 identifier = "com.gaauwe.fast-forward"
-icon = ["assets/icon.icns"]
-version = "1.0.0"
-resources = []
-copyright = "Copyright © 2025"
-category = "Developer Tool"
-short_description = "Fast window switcher for macOS"
-osx_minimum_system_version = "10.13"
+copyright = "Copyright (c) Gaauwe Rombouts 2025. All rights reserved."
+category = "Productivity"
+target_triple = "universal-apple-darwin"
+icons = ["icons/*.png"]
+
+[package.metadata.packager.macos]
+entitlements = "macos/entitlements.plist"
+signing_identity = "-"
 
 [dependencies]
 anyhow = "1.0.95"
@@ -31,6 +32,7 @@ objc2 = "0.6.0"
 objc2-app-kit = "0.3.0"
 prost = "0.13.4"
 prost-types = "0.13.4"
+rust-embed = "8.6.0"
 serde = "1.0.217"
 tokio = {version= "1.43.0", features = ["full"]}
 tokio-uds = "0.2.7"

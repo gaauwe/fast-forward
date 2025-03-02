@@ -1,120 +1,45 @@
 #!/bin/bash
 
-# Exit on any error
 set -e
-
 echo "🚀 Starting Fast Forward build process..."
 
-echo "📦 Checking required tools..."
-if ! command -v create-dmg &> /dev/null; then
-    echo "Installing create-dmg..."
-    brew install create-dmg
+if diskutil list 2>/dev/null | grep -q "Fast Forward$" || [ -d "/Volumes/Fast Forward/" ]; then
+    echo "🔄 Unmounting any existing Fast Forward disk images..."
+    diskutil list 2>/dev/null | grep "Fast Forward$" | awk '{print $NF}' | xargs -I{} diskutil unmountDisk force {} >/dev/null 2>&1 || true
+    [ -d "/Volumes/Fast Forward/" ] && hdiutil detach "/Volumes/Fast Forward/" -force >/dev/null 2>&1 || true
 fi
 
-echo "🎨 Creating icon assets..."
-mkdir -p icons.iconset
-
-echo "📐 Generating icon sizes..."
+generate_icons=false
+mkdir -p icons >/dev/null 2>&1
 for size in 16 32 128 256 512; do
-    sips -z $size $size assets/app_icon.png --out icons.iconset/icon_${size}x${size}.png
-    sips -z $((size*2)) $((size*2)) assets/app_icon.png --out icons.iconset/icon_${size}x${size}@2x.png
+    if [ ! -f "icons/icon_${size}x${size}.png" ] || [ "assets/app_icon.png" -nt "icons/icon_${size}x${size}.png" ] || \
+        [ ! -f "icons/icon_${size}x${size}@2x.png" ] || [ "assets/app_icon.png" -nt "icons/icon_${size}x${size}@2x.png" ]; then
+        generate_icons=true
+        break
+    fi
 done
 
-echo "🎯 Creating icns file..."
-mkdir -p assets
-iconutil -c icns icons.iconset -o assets/icon.icns
-rm -rf icons.iconset
-
-echo "🔨 Building release version..."
-cargo build --release
-
-echo "📦 Creating app bundle..."
-# Create the bundle directory structure
-BUNDLE_DIR="target/release/bundle/osx/Fast Forward.app"
-mkdir -p "${BUNDLE_DIR}/Contents/MacOS"
-mkdir -p "${BUNDLE_DIR}/Contents/MacOS/assets/icons"
-mkdir -p "${BUNDLE_DIR}/Contents/Resources"
-
-# Copy the binary
-cp target/release/fast-forward "${BUNDLE_DIR}/Contents/MacOS/Fast Forward"
-
-# Copy the icons
-cp assets/icon.icns "${BUNDLE_DIR}/Contents/Resources/"
-cp assets/icons/* "${BUNDLE_DIR}/Contents/MacOS/assets/icons/"
-
-# Create Info.plist
-cat > "${BUNDLE_DIR}/Contents/Info.plist" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>English</string>
-    <key>CFBundleExecutable</key>
-    <string>Fast Forward</string>
-    <key>CFBundleIconFile</key>
-    <string>icon</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.gaauwe.fast-forward</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Fast Forward</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.developer-tools</string>
-</dict>
-</plist>
-EOF
-
-echo "🔐 Signing the application..."
-# First remove any existing extended attributes
-xattr -cr "${BUNDLE_DIR}"
-
-# Sign the binary
-codesign --force --deep --sign - "${BUNDLE_DIR}/Contents/MacOS/Fast Forward"
-
-# Sign the app bundle
-codesign --force --deep --sign - "${BUNDLE_DIR}"
-
-echo "💿 Creating DMG file..."
-rm -f FastForward.dmg
-
-if [ ! -d "${BUNDLE_DIR}" ]; then
-    echo "Error: App bundle directory not found at ${BUNDLE_DIR}"
-    exit 1
+if [ "$generate_icons" = true ]; then
+    echo "📐 Generating icon sizes..."
+    for size in 16 32 128 256 512; do
+        sips -z $size $size assets/app_icon.png --out icons/icon_${size}x${size}.png >/dev/null 2>&1
+        sips -z $((size*2)) $((size*2)) assets/app_icon.png --out icons/icon_${size}x${size}@2x.png >/dev/null 2>&1
+    done
 fi
 
-create-dmg \
-    --volname "Fast Forward" \
-    --volicon "assets/icon.icns" \
-    --window-pos 200 120 \
-    --window-size 600 400 \
-    --icon-size 100 \
-    --icon "Fast Forward.app" 175 120 \
-    --hide-extension "Fast Forward.app" \
-    --app-drop-link 425 120 \
-    "FastForward.dmg" \
-    "${BUNDLE_DIR}/"
+echo "🔨 Building for multiple architectures..."
+rustup target add aarch64-apple-darwin x86_64-apple-darwin >/dev/null 2>&1
+cargo build --target=x86_64-apple-darwin --release >/dev/null 2>&1
+cargo build --target=aarch64-apple-darwin --release >/dev/null 2>&1
 
-echo "🔐 Signing the DMG..."
-codesign --force --sign - "FastForward.dmg"
+echo "🔄 Creating universal binary..."
+mkdir -p target/universal-apple-darwin/release/ >/dev/null 2>&1
+lipo -create -output target/universal-apple-darwin/release/fast-forward \
+    target/x86_64-apple-darwin/release/fast-forward \
+    target/aarch64-apple-darwin/release/fast-forward >/dev/null 2>&1
 
-echo "✨ Build complete! FastForward.dmg has been created and signed."
+echo "📦 Packaging the application..."
+cargo install cargo-packager --locked >/dev/null 2>&1
+cargo packager --release >/dev/null 2>&1
 
-# Print some verification information
-echo "🔍 Verification information:"
-codesign -vv --deep --strict "${BUNDLE_DIR}"
-codesign -vv "FastForward.dmg"
-
-echo "🗑️ Removing the bundle directory..."
-rm -rf "${BUNDLE_DIR}"
+echo "✅ Build completed successfully!"

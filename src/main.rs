@@ -1,5 +1,6 @@
 #![allow(clippy::new_ret_no_self)]
 mod applications;
+mod assets;
 mod commander;
 mod config;
 mod hotkey;
@@ -14,10 +15,8 @@ mod socket_message {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-use std::fs;
-use std::path::PathBuf;
-
 use applications::Applications;
+use assets::Assets;
 use commander::Commander;
 use config::Config;
 use hotkey::Hotkey;
@@ -30,18 +29,12 @@ use window::Window;
 use cocoa::appkit::NSApplication;
 use cocoa::appkit::NSApplicationActivationPolicy;
 use cocoa::base::nil;
-use gpui::{App, Application, AssetSource, Result, SharedString};
+use gpui::{App, Application};
 
 #[tokio::main]
 async fn main() {
     Application::new()
-        .with_assets(Assets {
-            base: if cfg!(debug_assertions) {
-                PathBuf::from("assets")
-            } else {
-                std::env::current_exe().unwrap().parent().unwrap().join("assets")
-            },
-        })
+        .with_assets(Assets)
         .run(|cx: &mut App| {
         // Start the application in accessory mode, which means it won't appear in the dock.
         // - https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/accessory
@@ -65,31 +58,4 @@ async fn main() {
             Hotkey::new(cx);
         }
     });
-}
-
-struct Assets {
-    base: PathBuf,
-}
-
-impl AssetSource for Assets {
-    fn load(&self, path: &str) -> Result<Option<std::borrow::Cow<'static, [u8]>>> {
-        fs::read(self.base.join(path))
-            .map(|data| Some(std::borrow::Cow::Owned(data)))
-            .map_err(std::convert::Into::into)
-    }
-
-    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        fs::read_dir(self.base.join(path))
-            .map(|entries| {
-                entries
-                    .filter_map(|entry| {
-                        entry
-                            .ok()
-                            .and_then(|entry| entry.file_name().into_string().ok())
-                            .map(SharedString::from)
-                    })
-                    .collect()
-            })
-            .map_err(std::convert::Into::into)
-    }
 }

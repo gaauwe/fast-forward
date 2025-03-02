@@ -24,7 +24,6 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          brew install create-dmg
           brew install yq
           brew install protobuf
           brew install swift-protobuf
@@ -112,6 +111,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./FastForward.dmg
+          asset_path: ./target/universal-apple-darwin/release/Fast Forward_${{ steps.get_version.outputs.version }}_universal.dmg
           asset_name: FastForward.dmg
           asset_content_type: application/x-apple-diskimage
