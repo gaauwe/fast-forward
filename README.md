@@ -20,3 +20,18 @@
    - Use Tab to highlight the next app in the list.
 4. Release the Command key to switch to the selected app.
    - To hide or close the selected app, press Space or Escape instead of releasing the Command key.
+
+## Installation
+1. Download the latest available DMG from releases page
+2. Open the downloaded DMG file
+3. Drag and drop the "Fast Forward.app" file to the Applications folder
+
+You may see this message:
+```
+Apple could not verify "FastForward.dmg" is free of malware that may harm your Mac or compromise your privacy.
+```
+
+To resolve the problem, run the following command in Terminal:
+```
+xattr -d com.apple.quarantine ~/Downloads/FastForward.dmg
+```

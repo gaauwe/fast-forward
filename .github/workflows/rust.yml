@@ -88,23 +88,6 @@ jobs:
           body: |
             ${{ steps.changelog.outputs.changelog }}
 
-            ### Installation Instructions
-
-            Since this is an unsigned application, you'll need to follow these steps to open it:
-
-            1. Download the DMG file
-            2. Try to mount the DMG by double-clicking it
-            3. When blocked, open System Settings > Privacy & Security
-            4. Scroll down and click "Open Anyway" for the DMG file
-            5. Mount the DMG by double-clicking it again
-            6. Drag FastForward.app to your Applications folder
-            7. Try to open FastForward.app from Applications folder
-            8. When blocked, open System Settings > Privacy & Security again
-            9. Scroll down and click "Open Anyway" for FastForward.app
-            10. Click "Open" in the final confirmation dialog
-
-            You only need to do this once. After the first launch, you can open the app normally.
-
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
