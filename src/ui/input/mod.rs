@@ -7,7 +7,7 @@ use gpui::{
 };
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{applications::{Applications, IndexType}, hotkey::RIGHT_CMD_IS_DOWN, theme::Theme};
+use crate::{applications::{Applications, IndexType}, hotkey::IS_ACTIVE, theme::Theme};
 
 actions!(
     text_input,
@@ -75,7 +75,7 @@ impl TextInput {
             }
 
             // Trap focus as long as the command key is pressed.
-            if RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+            if IS_ACTIVE.load(Ordering::SeqCst) {
                 cx.activate(true);
             }
         }).detach();

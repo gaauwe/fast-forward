@@ -9,7 +9,7 @@ pub enum EventType {
 
 #[derive(Debug, Clone, Copy)]
 pub enum HotkeyEvent {
-    ShowWindow,
+    ShowWindow(usize),
     HideWindow,
     HideApplication,
     QuitApplication,

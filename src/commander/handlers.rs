@@ -22,8 +22,10 @@ pub(super) fn handle_event(cx: &AsyncApp, event: EventType) -> Result<(), Box<dy
 
 fn handle_hotkey_event(cx: &AsyncApp, event: HotkeyEvent) -> Result<(), Box<dyn std::error::Error>> {
     match event {
-        HotkeyEvent::ShowWindow => {
-            cx.update(Window::show)?;
+        HotkeyEvent::ShowWindow(offset) => {
+            cx.update(|cx| {
+                    Window::show(cx, offset)
+            })?;
         }
         HotkeyEvent::HideWindow => {
             cx.update(|cx| {

@@ -14,7 +14,7 @@
 
 ## How It Works
 
-1. Press the right Command key to trigger Fast Forward.
+1. Press the right Command key to trigger Fast Forward (or left Command key + Tab if enabled in settings).
 2. You can:
    - Type to search for the app you want.
    - Use Tab to highlight the next app in the list.

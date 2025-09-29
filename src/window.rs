@@ -61,11 +61,13 @@ impl Window {
         });
     }
 
-    pub fn show(cx: &mut App) {
+    pub fn show(cx: &mut App, offset: usize) {
         Self::close(cx);
-
-        // Reset the selected application before showing the window.
         Applications::update_active_index(cx, IndexType::Start);
+
+        if offset > 0 {
+            Applications::update_active_index(cx, IndexType::Next);
+        }
 
         let display_id = cx.global::<Self>().display_id;
         let active_display_id = Self::get_active_display_id(cx);

@@ -9,17 +9,20 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize, Default)]
 pub struct GeneralConfig {
     pub show_tray: Option<bool>,
+    pub enable_left_cmd: Option<bool>,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize)]
 pub struct General {
     pub show_tray: bool,
+    pub enable_left_cmd: bool,
 }
 
 impl Default for General {
     fn default() -> Self {
         Self {
             show_tray: true,
+            enable_left_cmd: false,
         }
     }
 }
@@ -88,6 +91,7 @@ impl Config {
             },
             general: General {
                 show_tray: config.general.show_tray.map_or(default_general.show_tray, Into::into),
+                enable_left_cmd: config.general.enable_left_cmd.map_or(default_general.enable_left_cmd, Into::into),
             },
         }
     }

@@ -6,20 +6,22 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
 use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
 
-use crate::commander::{Commander, EventType, HotkeyEvent};
+use crate::{commander::{Commander, EventType, HotkeyEvent}, config::Config};
 
-pub static RIGHT_CMD_IS_DOWN: AtomicBool = AtomicBool::new(false);
-pub static ESCAPE_PRESSED: AtomicBool = AtomicBool::new(false);
-pub static SPACE_PRESSED: AtomicBool = AtomicBool::new(false);
+pub static IS_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
-    /// Right Command key (keycode 54)
-    RightCommand = 54,
-    /// Escape key (keycode 53)
-    Escape = 53,
+    /// Tab key (keycode 48)
+    Tab = 48,
     /// Space key (keycode 49)
     Space = 49,
+    /// Escape key (keycode 53)
+    Escape = 53,
+    /// Right Command key (keycode 54)
+    RightCommand = 54,
+    /// Left Command key (keycode 55)
+    LeftCommand = 55,
     /// Any other key
     Other
 }
@@ -27,9 +29,11 @@ pub enum Key {
 impl From<i64> for Key {
     fn from(value: i64) -> Self {
         match value {
-            54 => Key::RightCommand,
-            53 => Key::Escape,
+            48 => Key::Tab,
             49 => Key::Space,
+            53 => Key::Escape,
+            55 => Key::LeftCommand,
+            54 => Key::RightCommand,
             _ => Key::Other
         }
     }
@@ -61,9 +65,8 @@ impl Hotkey {
                         }
                     },
                     CGEventType::KeyDown => {
-                        // Block right command key events.
-                        if keycode == Key::RightCommand as i64 {
-                            new_event.set_type(CGEventType::Null);
+                        if let Some(hotkey_event) = handler.handle_flags_changed(keycode, flags) {
+                            handler.send_event(hotkey_event);
                         }
 
                         if let Some((hotkey_event, should_block)) = handler.handle_key_down(keycode, &mut flags) {
@@ -106,32 +109,56 @@ impl Global for Hotkey {}
 
 struct EventHandler {
     tx: UnboundedSender<EventType>,
+    enable_left_cmd: bool,
 }
 
 impl EventHandler {
     fn new(cx: &mut App) -> Self {
         let tx = cx.global::<Commander>().tx.clone();
+        let config = cx.global::<Config>();
+        let enable_left_cmd = config.general.enable_left_cmd;
 
-        Self { tx }
+        Self { tx, enable_left_cmd }
     }
 
     fn handle_flags_changed(&self, keycode: i64, flags: CGEventFlags) -> Option<HotkeyEvent> {
-        if keycode == Key::RightCommand as i64 {
-            let right_cmd_is_down = flags.contains(CGEventFlags::CGEventFlagCommand);
-            RIGHT_CMD_IS_DOWN.store(right_cmd_is_down, Ordering::SeqCst);
-            Some(if right_cmd_is_down {
-                HotkeyEvent::ShowWindow
+        let is_active = match keycode.into() {
+            Key::RightCommand => {
+                Some((flags.contains(CGEventFlags::CGEventFlagCommand), 0))
+            }
+            Key::Tab => {
+                if self.enable_left_cmd {
+                    Some((flags.contains(CGEventFlags::CGEventFlagCommand), 1))
+                } else {
+                    None
+                }
+            }
+            Key::LeftCommand => {
+                if self.enable_left_cmd && !flags.contains(CGEventFlags::CGEventFlagCommand) {
+                    Some((false, 0))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        is_active.and_then(|(active, offset)| {
+            if IS_ACTIVE.load(Ordering::SeqCst) == active {
+                None
             } else {
-                HotkeyEvent::HideWindow
-            })
-        } else {
-            None
-        }
+                IS_ACTIVE.store(active, Ordering::SeqCst);
+                Some(if active {
+                    HotkeyEvent::ShowWindow(offset)
+                } else {
+                    HotkeyEvent::HideWindow
+                })
+            }
+        })
     }
 
     fn handle_key_down(&self, keycode: i64, flags: &mut CGEventFlags) -> Option<(HotkeyEvent, bool)> {
-        // Early return if command is not down.
-        if !RIGHT_CMD_IS_DOWN.load(Ordering::SeqCst) {
+        if !IS_ACTIVE.load(Ordering::SeqCst) {
             return None;
         }
 
@@ -140,16 +167,12 @@ impl EventHandler {
 
         match Key::from(keycode) {
             Key::Escape => {
-                ESCAPE_PRESSED.store(true, Ordering::SeqCst);
                 Some((HotkeyEvent::QuitApplication, true))
             },
             Key::Space => {
-                SPACE_PRESSED.store(true, Ordering::SeqCst);
                 Some((HotkeyEvent::HideApplication, true))
             },
             _ => {
-                SPACE_PRESSED.store(false, Ordering::SeqCst);
-                ESCAPE_PRESSED.store(false, Ordering::SeqCst);
                 None
             }
         }

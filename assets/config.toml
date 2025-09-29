@@ -15,3 +15,4 @@ border = { h = 0.0, s = 0.0, l = 0.31, a = 1.0 }
 
 [general]
 show_tray = true
+enable_left_cmd = false
