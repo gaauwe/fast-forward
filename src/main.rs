@@ -46,9 +46,15 @@ async fn main() {
         // Initialize the application components.
         Logger::new();
         Commander::new(cx);
-        Tray::new(cx);
+
+        // Load the configuration (and initialize the tray).
+        let config = Config::new(cx);
+        if config.general.show_tray {
+            Tray::new(cx);
+        }
+
+        // Start the application.
         Applications::new(cx);
-        Config::new(cx);
         Theme::new(cx);
         Window::new(cx);
 

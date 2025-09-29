@@ -6,23 +6,47 @@ use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize)]
-pub struct TomlConfig {
-    pub theme: ThemeConfig
+#[derive(Debug, Deserialize, Default)]
+pub struct GeneralConfig {
+    pub show_tray: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Copy, Clone, Debug, Deserialize)]
+pub struct General {
+    pub show_tray: bool,
+}
+
+impl Default for General {
+    fn default() -> Self {
+        Self {
+            show_tray: true,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TomlConfig {
+    pub theme: ThemeConfig,
+    pub general: GeneralConfig,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
 pub struct Config {
     pub theme: Theme,
+    pub general: General,
 }
 
 impl Config {
-    pub fn new(cx: &mut App) {
+    pub fn new(cx: &mut App) -> Self {
         match Config::load() {
-            Ok(config) => cx.set_global(config),
+            Ok(config) => {
+                cx.set_global(config.clone());
+                config
+            },
             Err(e) => {
                 error!("Failed to load configuration: {e}");
                 cx.set_global(Config::default());
+                Config::default()
             }
         }
     }
@@ -51,6 +75,8 @@ impl Config {
 
     fn build_config(config: TomlConfig) -> Self {
         let default_theme = Theme::default();
+        let default_general = General::default();
+
         Self {
             theme: Theme {
                 primary: config.theme.primary.map_or(default_theme.primary, Into::into),
@@ -59,7 +85,10 @@ impl Config {
                 muted: config.theme.muted.map_or(default_theme.muted, Into::into),
                 muted_foreground: config.theme.muted_foreground.map_or(default_theme.muted_foreground, Into::into),
                 border: config.theme.border.map_or(default_theme.border, Into::into),
-            }
+            },
+            general: General {
+                show_tray: config.general.show_tray.map_or(default_general.show_tray, Into::into),
+            },
         }
     }
 
