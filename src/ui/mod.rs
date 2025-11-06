@@ -7,12 +7,12 @@ use input::{SearchQuery, TextInput};
 use prelude::FluentBuilder;
 use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;
 
-use crate::{applications::Applications, theme::Theme, ui::list::List};
+use crate::{applications::Applications, config::Config, theme::Theme, ui::list::List};
 
 pub struct Container {
     pub input: Entity<TextInput>,
     pub list: Entity<List>,
-    pub trusted: bool
+    pub trusted: bool,
 }
 
 pub static LIST_ITEM_HEIGHT: f32 = 40.;
@@ -124,6 +124,7 @@ impl Render for Container {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.global::<Theme>();
         let height = self.get_height(cx);
+        let disable_quit = cx.global::<Config>().general.disable_quit;
 
         div()
             .flex()
@@ -158,7 +159,9 @@ impl Render for Container {
                     .border_t_1()
                     .border_color(theme.border)
                     .child(self.render_action_button(theme, "Hide", "␣"))
-                    .child(self.render_action_button(theme, "Quit", "⎋")),
+                    .when(!disable_quit, |cx| {
+                        cx.child(self.render_action_button(theme, "Quit", "⎋"))
+                    })
             )
     }
 }

@@ -110,15 +110,19 @@ impl Global for Hotkey {}
 struct EventHandler {
     tx: UnboundedSender<EventType>,
     enable_left_cmd: bool,
+    disable_quit: bool,
 }
 
 impl EventHandler {
     fn new(cx: &mut App) -> Self {
         let tx = cx.global::<Commander>().tx.clone();
         let config = cx.global::<Config>();
-        let enable_left_cmd = config.general.enable_left_cmd;
 
-        Self { tx, enable_left_cmd }
+        Self {
+            tx,
+            enable_left_cmd: config.general.enable_left_cmd,
+            disable_quit: config.general.disable_quit,
+        }
     }
 
     fn handle_flags_changed(&self, keycode: i64, flags: CGEventFlags) -> Option<HotkeyEvent> {
@@ -166,7 +170,7 @@ impl EventHandler {
         flags.remove(CGEventFlags::CGEventFlagCommand);
 
         match Key::from(keycode) {
-            Key::Escape => {
+            Key::Escape if !self.disable_quit => {
                 Some((HotkeyEvent::QuitApplication, true))
             },
             Key::Space => {
