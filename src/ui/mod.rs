@@ -2,10 +2,13 @@ pub mod icon;
 pub mod input;
 pub mod list;
 
-use gpui::{div, prelude, px, App, AppContext, ClickEvent, Context, Entity, InteractiveElement, IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Window};
+use gpui::{
+    div, prelude, px, App, AppContext, ClickEvent, Context, Entity, InteractiveElement,
+    IntoElement, ParentElement, Render, StatefulInteractiveElement, Styled, Window,
+};
 use input::{SearchQuery, TextInput};
-use prelude::FluentBuilder;
 use macos_accessibility_client::accessibility::application_is_trusted_with_prompt;
+use prelude::FluentBuilder;
 
 use crate::{applications::Applications, config::Config, theme::Theme, ui::list::List};
 
@@ -27,10 +30,19 @@ impl Container {
 
         let trusted = application_is_trusted_with_prompt();
 
-        Self { input, list, trusted }
+        Self {
+            input,
+            list,
+            trusted,
+        }
     }
 
-    fn update_accessibility_permission(&mut self, _: &ClickEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn update_accessibility_permission(
+        &mut self,
+        _: &ClickEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if application_is_trusted_with_prompt() {
             if let Ok(current_exe) = std::env::current_exe() {
                 cx.restart(Some(current_exe));
@@ -58,7 +70,7 @@ impl Container {
     fn render_accessibility_prompt(
         &self,
         theme: &Theme,
-        listener: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static
+        listener: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     ) -> impl IntoElement {
         div()
             .flex()
@@ -94,7 +106,7 @@ impl Container {
                     .px_2()
                     .mt_3()
                     .cursor_pointer()
-                    .child("Check again")
+                    .child("Check again"),
             )
     }
 
@@ -102,7 +114,7 @@ impl Container {
         &self,
         theme: &Theme,
         label: impl Into<String>,
-        shortcut: impl Into<String>
+        shortcut: impl Into<String>,
     ) -> impl IntoElement {
         div()
             .flex()
@@ -115,7 +127,7 @@ impl Container {
                 div()
                     .text_color(theme.muted_foreground)
                     .mb_0p5()
-                    .child(shortcut.into())
+                    .child(shortcut.into()),
             )
     }
 }
@@ -139,11 +151,12 @@ impl Render for Container {
             .p(px(5.0))
             .mx(px(10.))
             .child(self.input.clone())
-            .when(self.trusted, |cx| {
-                cx.child(self.list.clone())
-            })
+            .when(self.trusted, |cx| cx.child(self.list.clone()))
             .when(!self.trusted, |element| {
-                element.child(self.render_accessibility_prompt(theme, cx.listener(Self::update_accessibility_permission)))
+                element.child(self.render_accessibility_prompt(
+                    theme,
+                    cx.listener(Self::update_accessibility_permission),
+                ))
             })
             .child(
                 div()
@@ -161,7 +174,7 @@ impl Render for Container {
                     .child(self.render_action_button(theme, "Hide", "␣"))
                     .when(!disable_quit, |cx| {
                         cx.child(self.render_action_button(theme, "Quit", "⎋"))
-                    })
+                    }),
             )
     }
 }

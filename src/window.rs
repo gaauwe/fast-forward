@@ -1,8 +1,14 @@
 use core_graphics::display::{CGDisplay, CGPoint};
-use gpui::{App, AppContext, Bounds, DisplayId, Global, Pixels, Point, Size, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions};
+use gpui::{
+    App, AppContext, Bounds, DisplayId, Global, Pixels, Point, Size, WindowBackgroundAppearance,
+    WindowBounds, WindowHandle, WindowKind, WindowOptions,
+};
 use mouse_position::mouse_position::Mouse;
 
-use crate::{applications::{Applications, IndexType}, ui::Container};
+use crate::{
+    applications::{Applications, IndexType},
+    ui::Container,
+};
 
 pub struct Window {
     pub window: WindowHandle<Container>,
@@ -13,13 +19,16 @@ impl Window {
     pub fn new(cx: &mut App) {
         // Calculate the bounds of the active display.
         let display_id = Self::get_active_display_id(cx);
-        let bounds = cx.displays().iter().find(|d| d.id() == display_id).map_or(Bounds {
-            origin: Point::new(Pixels::from(0.0), Pixels::from(0.0)),
-            size: Size {
-                width: Pixels::from(1920.0),
-                height: Pixels::from(1080.0),
+        let bounds = cx.displays().iter().find(|d| d.id() == display_id).map_or(
+            Bounds {
+                origin: Point::new(Pixels::from(0.0), Pixels::from(0.0)),
+                size: Size {
+                    width: Pixels::from(1920.0),
+                    height: Pixels::from(1080.0),
+                },
             },
-        }, |d| d.bounds());
+            |d| d.bounds(),
+        );
 
         // Calculate the height and position of the window.
         let height = Pixels(bounds.size.height.0 * 0.5);
@@ -29,24 +38,23 @@ impl Window {
         let y: Pixels = Pixels(bounds.size.height.0 * 0.3);
 
         // Launch the window.
-        let window = cx.open_window(
-            WindowOptions {
-                titlebar: None,
-                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                    Point { x, y },
-                    Size { width, height },
-                ))),
-                window_background: WindowBackgroundAppearance::Blurred,
-                kind: WindowKind::PopUp,
-                is_movable: false,
-                display_id: Some(display_id),
-                ..Default::default()
-            },
-            |window, cx| {
-                cx.new(|cx| Container::new(window, cx))
-            },
-        )
-        .unwrap();
+        let window = cx
+            .open_window(
+                WindowOptions {
+                    titlebar: None,
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                        Point { x, y },
+                        Size { width, height },
+                    ))),
+                    window_background: WindowBackgroundAppearance::Blurred,
+                    kind: WindowKind::PopUp,
+                    is_movable: false,
+                    display_id: Some(display_id),
+                    ..Default::default()
+                },
+                |window, cx| cx.new(|cx| Container::new(window, cx)),
+            )
+            .unwrap();
 
         // Auto focus the input field.
         window
@@ -55,10 +63,7 @@ impl Window {
             })
             .unwrap();
 
-        cx.set_global(Self {
-            window,
-            display_id,
-        });
+        cx.set_global(Self { window, display_id });
     }
 
     pub fn show(cx: &mut App, offset: usize) {
@@ -75,26 +80,37 @@ impl Window {
         // Delay the opening of the window to prevent flickering.
         if display_id != active_display_id {
             cx.spawn(|cx| async move {
-                cx.background_executor().timer(std::time::Duration::from_millis(0)).await;
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(0))
+                    .await;
                 cx.update(|cx| {
                     Self::new(cx);
                 })
-            }).detach();
+            })
+            .detach();
         } else {
             Self::new(cx);
         }
     }
 
     pub fn hide(cx: &mut App) {
-        let _ = cx.global::<Window>().window.clone().update(cx, |_view, _window, cx| {
-            cx.hide();
-        });
+        let _ = cx
+            .global::<Window>()
+            .window
+            .clone()
+            .update(cx, |_view, _window, cx| {
+                cx.hide();
+            });
     }
 
     pub fn close(cx: &mut App) {
-        let _ = cx.global::<Window>().window.clone().update(cx, |_view, window, _cx| {
-            window.remove_window();
-        });
+        let _ = cx
+            .global::<Window>()
+            .window
+            .clone()
+            .update(cx, |_view, window, _cx| {
+                window.remove_window();
+            });
     }
 
     fn get_active_display_id(cx: &mut App) -> DisplayId {
@@ -112,7 +128,10 @@ impl Window {
                     let display = CGDisplay::new(display_id);
                     let bounds = display.bounds();
 
-                    if bounds.contains(&CGPoint { x: f64::from(x), y: f64::from(y) }) {
+                    if bounds.contains(&CGPoint {
+                        x: f64::from(x),
+                        y: f64::from(y),
+                    }) {
                         // Find the corresponding GPUI display, since that returns a DisplayId that we can use to open a window.
                         let gpui_display = gpui_displays.iter().find(|d| {
                             // We can't access the private integer, but the struct does implement fmt based on the private integer 🥴.
@@ -125,7 +144,7 @@ impl Window {
                 }
 
                 fallback_display_id
-            },
+            }
             Mouse::Error => fallback_display_id,
         }
     }

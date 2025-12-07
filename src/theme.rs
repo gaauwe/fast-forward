@@ -1,4 +1,4 @@
-use gpui::{App, Global, Hsla, hsla};
+use gpui::{hsla, App, Global, Hsla};
 use serde::Deserialize;
 
 use crate::config::Config;

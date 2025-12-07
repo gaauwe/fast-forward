@@ -35,3 +35,40 @@ To resolve the problem, run the following command in Terminal:
 ```
 xattr -d com.apple.quarantine ~/Downloads/FastForward.dmg
 ```
+
+## Development
+
+### Prerequisites
+- Rust (stable toolchain)
+- Xcode Command Line Tools
+- protobuf: `brew install protobuf`
+- swift-protobuf: `brew install swift-protobuf`
+
+### Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/fast-forward.git
+cd fast-forward
+
+# Build in debug mode
+cargo build
+
+# Build in release mode
+cargo build --release
+
+# Run the application
+cargo run
+```
+
+### Code Quality
+
+This project uses `cargo fmt` and `cargo clippy` to maintain code quality.
+
+```bash
+# Format code
+cargo fmt --all
+
+# Run linter
+cargo clippy --all-targets -- -D warnings
+```

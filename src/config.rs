@@ -1,7 +1,7 @@
-use log::error;
 use crate::theme::{Theme, ThemeConfig};
 use anyhow::{Context, Result};
 use gpui::{App, Global};
+use log::error;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -48,7 +48,7 @@ impl Config {
             Ok(config) => {
                 cx.set_global(config.clone());
                 config
-            },
+            }
             Err(e) => {
                 error!("Failed to load configuration: {e}");
                 cx.set_global(Config::default());
@@ -85,17 +85,38 @@ impl Config {
 
         Self {
             theme: Theme {
-                primary: config.theme.primary.map_or(default_theme.primary, Into::into),
-                background: config.theme.background.map_or(default_theme.background, Into::into),
-                foreground: config.theme.foreground.map_or(default_theme.foreground, Into::into),
+                primary: config
+                    .theme
+                    .primary
+                    .map_or(default_theme.primary, Into::into),
+                background: config
+                    .theme
+                    .background
+                    .map_or(default_theme.background, Into::into),
+                foreground: config
+                    .theme
+                    .foreground
+                    .map_or(default_theme.foreground, Into::into),
                 muted: config.theme.muted.map_or(default_theme.muted, Into::into),
-                muted_foreground: config.theme.muted_foreground.map_or(default_theme.muted_foreground, Into::into),
+                muted_foreground: config
+                    .theme
+                    .muted_foreground
+                    .map_or(default_theme.muted_foreground, Into::into),
                 border: config.theme.border.map_or(default_theme.border, Into::into),
             },
             general: General {
-                show_tray: config.general.show_tray.map_or(default_general.show_tray, Into::into),
-                enable_left_cmd: config.general.enable_left_cmd.map_or(default_general.enable_left_cmd, Into::into),
-                disable_quit: config.general.disable_quit.map_or(default_general.disable_quit, Into::into),
+                show_tray: config
+                    .general
+                    .show_tray
+                    .map_or(default_general.show_tray, Into::into),
+                enable_left_cmd: config
+                    .general
+                    .enable_left_cmd
+                    .map_or(default_general.enable_left_cmd, Into::into),
+                disable_quit: config
+                    .general
+                    .disable_quit
+                    .map_or(default_general.disable_quit, Into::into),
             },
         }
     }
