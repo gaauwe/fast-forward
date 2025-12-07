@@ -11,6 +11,7 @@ mod tray;
 mod ui;
 mod window;
 
+#[allow(clippy::all)]
 mod socket_message {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }

@@ -97,7 +97,7 @@ impl Socket {
         match message.event {
             Some(event) => {
                 tx.send(EventType::SocketEvent(event))
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(std::io::Error::other)?;
                 Ok(())
             }
             None => Err(std::io::Error::new(
@@ -118,8 +118,7 @@ impl Socket {
             }
         }
 
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        Err(std::io::Error::other(
             "Swift process terminated or message not found",
         ))
     }
@@ -166,10 +165,7 @@ impl Socket {
 
                 Ok(process)
             }
-            Err(_) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to save Swift binary",
-            )),
+            Err(_) => Err(std::io::Error::other("Failed to save Swift binary")),
         }
     }
 }
