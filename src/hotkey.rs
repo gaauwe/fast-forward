@@ -66,13 +66,23 @@ impl Hotkey {
 
                 match event_type {
                     CGEventType::FlagsChanged => {
-                        if let Some(hotkey_event) = handler.handle_flags_changed(keycode, flags) {
+                        if let Some((hotkey_event, should_block)) =
+                            handler.handle_flags_changed(keycode, flags)
+                        {
                             handler.send_event(hotkey_event);
+                            if should_block {
+                                new_event.set_type(CGEventType::Null);
+                            }
                         }
                     }
                     CGEventType::KeyDown => {
-                        if let Some(hotkey_event) = handler.handle_flags_changed(keycode, flags) {
+                        if let Some((hotkey_event, should_block)) =
+                            handler.handle_flags_changed(keycode, flags)
+                        {
                             handler.send_event(hotkey_event);
+                            if should_block {
+                                new_event.set_type(CGEventType::Null);
+                            }
                         }
 
                         if let Some((hotkey_event, should_block)) =
@@ -131,19 +141,23 @@ impl EventHandler {
         }
     }
 
-    fn handle_flags_changed(&self, keycode: i64, flags: CGEventFlags) -> Option<HotkeyEvent> {
+    fn handle_flags_changed(
+        &self,
+        keycode: i64,
+        flags: CGEventFlags,
+    ) -> Option<(HotkeyEvent, bool)> {
         let is_active = match keycode.into() {
-            Key::RightCommand => Some((flags.contains(CGEventFlags::CGEventFlagCommand), 0)),
+            Key::RightCommand => Some((flags.contains(CGEventFlags::CGEventFlagCommand), 0, false)),
             Key::Tab => {
                 if self.enable_left_cmd {
-                    Some((flags.contains(CGEventFlags::CGEventFlagCommand), 1))
+                    Some((flags.contains(CGEventFlags::CGEventFlagCommand), 1, true))
                 } else {
                     None
                 }
             }
             Key::LeftCommand => {
                 if self.enable_left_cmd && !flags.contains(CGEventFlags::CGEventFlagCommand) {
-                    Some((false, 0))
+                    Some((false, 0, false))
                 } else {
                     None
                 }
@@ -151,16 +165,18 @@ impl EventHandler {
             _ => None,
         };
 
-        is_active.and_then(|(active, offset)| {
+        is_active.and_then(|(active, offset, should_block)| {
             if IS_ACTIVE.load(Ordering::SeqCst) == active {
                 None
             } else {
                 IS_ACTIVE.store(active, Ordering::SeqCst);
-                Some(if active {
+                let event = if active {
                     HotkeyEvent::ShowWindow(offset)
                 } else {
                     HotkeyEvent::HideWindow
-                })
+                };
+
+                Some((event, should_block))
             }
         })
     }
