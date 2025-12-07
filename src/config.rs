@@ -10,12 +10,14 @@ use std::path::{Path, PathBuf};
 pub struct GeneralConfig {
     pub show_tray: Option<bool>,
     pub enable_left_cmd: Option<bool>,
+    pub disable_quit: Option<bool>,
 }
 
 #[derive(Copy, Clone, Debug, Deserialize)]
 pub struct General {
     pub show_tray: bool,
     pub enable_left_cmd: bool,
+    pub disable_quit: bool,
 }
 
 impl Default for General {
@@ -23,6 +25,7 @@ impl Default for General {
         Self {
             show_tray: true,
             enable_left_cmd: false,
+            disable_quit: false,
         }
     }
 }
@@ -92,6 +95,7 @@ impl Config {
             general: General {
                 show_tray: config.general.show_tray.map_or(default_general.show_tray, Into::into),
                 enable_left_cmd: config.general.enable_left_cmd.map_or(default_general.enable_left_cmd, Into::into),
+                disable_quit: config.general.disable_quit.map_or(default_general.disable_quit, Into::into),
             },
         }
     }
