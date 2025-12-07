@@ -1,12 +1,18 @@
 use gpui::{App, Global};
 use log::error;
-use tokio::sync::mpsc::UnboundedSender;
 use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::mpsc::UnboundedSender;
 
 use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop, CFRunLoopSource};
-use core_graphics::event::{CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType, EventField};
+use core_graphics::event::{
+    CGEventFlags, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
+    CGEventType, EventField,
+};
 
-use crate::{commander::{Commander, EventType, HotkeyEvent}, config::Config};
+use crate::{
+    commander::{Commander, EventType, HotkeyEvent},
+    config::Config,
+};
 
 pub static IS_ACTIVE: AtomicBool = AtomicBool::new(false);
 
@@ -23,7 +29,7 @@ pub enum Key {
     /// Left Command key (keycode 55)
     LeftCommand = 55,
     /// Any other key
-    Other
+    Other,
 }
 
 impl From<i64> for Key {
@@ -34,7 +40,7 @@ impl From<i64> for Key {
             53 => Key::Escape,
             55 => Key::LeftCommand,
             54 => Key::RightCommand,
-            _ => Key::Other
+            _ => Key::Other,
         }
     }
 }
@@ -63,34 +69,35 @@ impl Hotkey {
                         if let Some(hotkey_event) = handler.handle_flags_changed(keycode, flags) {
                             handler.send_event(hotkey_event);
                         }
-                    },
+                    }
                     CGEventType::KeyDown => {
                         if let Some(hotkey_event) = handler.handle_flags_changed(keycode, flags) {
                             handler.send_event(hotkey_event);
                         }
 
-                        if let Some((hotkey_event, should_block)) = handler.handle_key_down(keycode, &mut flags) {
+                        if let Some((hotkey_event, should_block)) =
+                            handler.handle_key_down(keycode, &mut flags)
+                        {
                             handler.send_event(hotkey_event);
                             if should_block {
                                 new_event.set_type(CGEventType::Null);
                             }
                         }
                         new_event.set_flags(flags);
-                    },
+                    }
                     _ => {}
                 }
 
                 Some(new_event)
             },
-        ).unwrap_or_else(|e| {
+        )
+        .unwrap_or_else(|e| {
             panic!("Failed to create event tap: {:?}", e);
         });
 
-        let loop_source = tap.mach_port
-            .create_runloop_source(0)
-            .unwrap_or_else(|e| {
-                panic!("Failed to create runloop source: {:?}", e);
-            });
+        let loop_source = tap.mach_port.create_runloop_source(0).unwrap_or_else(|e| {
+            panic!("Failed to create runloop source: {:?}", e);
+        });
 
         unsafe {
             current.add_source(&loop_source, kCFRunLoopCommonModes);
@@ -105,7 +112,6 @@ impl Hotkey {
 }
 
 impl Global for Hotkey {}
-
 
 struct EventHandler {
     tx: UnboundedSender<EventType>,
@@ -127,9 +133,7 @@ impl EventHandler {
 
     fn handle_flags_changed(&self, keycode: i64, flags: CGEventFlags) -> Option<HotkeyEvent> {
         let is_active = match keycode.into() {
-            Key::RightCommand => {
-                Some((flags.contains(CGEventFlags::CGEventFlagCommand), 0))
-            }
+            Key::RightCommand => Some((flags.contains(CGEventFlags::CGEventFlagCommand), 0)),
             Key::Tab => {
                 if self.enable_left_cmd {
                     Some((flags.contains(CGEventFlags::CGEventFlagCommand), 1))
@@ -161,7 +165,11 @@ impl EventHandler {
         })
     }
 
-    fn handle_key_down(&self, keycode: i64, flags: &mut CGEventFlags) -> Option<(HotkeyEvent, bool)> {
+    fn handle_key_down(
+        &self,
+        keycode: i64,
+        flags: &mut CGEventFlags,
+    ) -> Option<(HotkeyEvent, bool)> {
         if !IS_ACTIVE.load(Ordering::SeqCst) {
             return None;
         }
@@ -170,15 +178,9 @@ impl EventHandler {
         flags.remove(CGEventFlags::CGEventFlagCommand);
 
         match Key::from(keycode) {
-            Key::Escape if !self.disable_quit => {
-                Some((HotkeyEvent::QuitApplication, true))
-            },
-            Key::Space => {
-                Some((HotkeyEvent::HideApplication, true))
-            },
-            _ => {
-                None
-            }
+            Key::Escape if !self.disable_quit => Some((HotkeyEvent::QuitApplication, true)),
+            Key::Space => Some((HotkeyEvent::HideApplication, true)),
+            _ => None,
         }
     }
 

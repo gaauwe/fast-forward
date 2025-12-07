@@ -1,16 +1,16 @@
+use anyhow::Context;
+use gpui::App;
+use log::error;
+use prost::Message;
 use std::fs;
+use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::Stdio;
-use gpui::App;
-use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::net::UnixStream;
-use tokio::sync::mpsc::UnboundedSender;
 use tokio::process::{Child, Command};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{sleep, Duration};
-use anyhow::Context;
-use std::io::prelude::*;
-use prost::Message;
-use log::error;
 
 use crate::commander::{Commander, EventType};
 use crate::socket_message::SocketMessage;
@@ -45,7 +45,10 @@ impl Socket {
 
     async fn handle_connection(tx: &UnboundedSender<EventType>) -> std::io::Result<()> {
         let (stream, swift_monitor) = Self::establish_connection().await?;
-        let mut connection = Socket { stream, swift_monitor };
+        let mut connection = Socket {
+            stream,
+            swift_monitor,
+        };
 
         loop {
             if let Err(e) = Self::handle_message(&mut connection, tx).await {
@@ -66,7 +69,10 @@ impl Socket {
         Ok((stream, swift_monitor))
     }
 
-    async fn handle_message(connection: &mut Socket, tx: &UnboundedSender<EventType>) -> std::io::Result<()> {
+    async fn handle_message(
+        connection: &mut Socket,
+        tx: &UnboundedSender<EventType>,
+    ) -> std::io::Result<()> {
         let message = Self::read_message(connection).await?;
         Self::process_message(message, tx)?;
         Ok(())
@@ -84,16 +90,20 @@ impl Socket {
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
-    fn process_message(message: SocketMessage, tx: &UnboundedSender<EventType>) -> std::io::Result<()> {
+    fn process_message(
+        message: SocketMessage,
+        tx: &UnboundedSender<EventType>,
+    ) -> std::io::Result<()> {
         match message.event {
             Some(event) => {
                 tx.send(EventType::SocketEvent(event))
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
                 Ok(())
             }
-            None => {
-                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "Message missing event"))
-            }
+            None => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Message missing event",
+            )),
         }
     }
 
@@ -149,16 +159,17 @@ impl Socket {
         let binary_path = Self::save_swift_binary();
         match &binary_path {
             Ok(path) => {
-                let process =Command::new(path)
+                let process = Command::new(path)
                     .env_remove("DYLD_LIBRARY_PATH")
                     .stdout(Stdio::piped())
                     .spawn()?;
 
                 Ok(process)
-            },
-            Err(_) => {
-                Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to save Swift binary"))
-            },
+            }
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Failed to save Swift binary",
+            )),
         }
     }
 }

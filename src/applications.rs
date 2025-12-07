@@ -5,10 +5,10 @@ use log::error;
 use objc2::rc::Retained;
 use objc2_app_kit::{NSApplicationActivationOptions, NSRunningApplication, NSWorkspace};
 
-use crate::ui::input::SearchQuery;
-use crate::window::Window;
 use crate::socket_message::App as Application;
+use crate::ui::input::SearchQuery;
 use crate::ui::list::List;
+use crate::window::Window;
 
 #[derive(Debug, Clone)]
 pub struct Applications {
@@ -22,7 +22,7 @@ impl Default for Applications {
         Self {
             list: Vec::new(),
             index: 0,
-            loading: true
+            loading: true,
         }
     }
 }
@@ -31,7 +31,7 @@ impl Default for Applications {
 pub enum ActionType {
     Activate,
     Hide,
-    Quit
+    Quit,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -51,7 +51,7 @@ impl Applications {
         cx.set_global(Self {
             list,
             index: 0,
-            loading: false
+            loading: false,
         });
     }
 
@@ -66,12 +66,19 @@ impl Applications {
         cx.set_global(applications);
     }
 
-    pub fn update_list_entry(cx: &mut App, app: Option<&Application>, index_type: Option<IndexType>, reset: bool) {
+    pub fn update_list_entry(
+        cx: &mut App,
+        app: Option<&Application>,
+        index_type: Option<IndexType>,
+        reset: bool,
+    ) {
         let applications = cx.global::<Applications>();
         let mut applications = applications.clone();
 
         if let Some(app) = app {
-            if let Some(existing_app_index) = applications.list.iter().position(|a| a.name == app.name) {
+            if let Some(existing_app_index) =
+                applications.list.iter().position(|a| a.name == app.name)
+            {
                 if index_type.is_some() {
                     applications.list.remove(existing_app_index);
                 } else {
@@ -80,7 +87,8 @@ impl Applications {
             }
 
             if let Some(index_type) = index_type {
-                let target_index = Self::get_index_from_type(&applications.list, applications.index, index_type);
+                let target_index =
+                    Self::get_index_from_type(&applications.list, applications.index, index_type);
                 applications.list.insert(target_index, app.clone());
             }
         }
@@ -90,7 +98,9 @@ impl Applications {
         // Reset the active index and search query.
         if reset {
             Self::update_active_index(cx, IndexType::Start);
-            cx.set_global(SearchQuery { value: String::new() });
+            cx.set_global(SearchQuery {
+                value: String::new(),
+            });
         }
     }
 
@@ -113,14 +123,14 @@ impl Applications {
                         unsafe {
                             native_app.activateWithOptions(NSApplicationActivationOptions::empty());
                         }
-                    },
+                    }
                     ActionType::Hide => {
                         Self::update_list_entry(cx, Some(app), Some(IndexType::End), true);
 
                         unsafe {
                             native_app.hide();
                         }
-                    },
+                    }
                     ActionType::Quit => {
                         Self::update_list_entry(cx, Some(app), None, true);
 
@@ -142,7 +152,11 @@ impl Applications {
         }
     }
 
-    fn get_index_from_type(list: &[Application], current_index: usize, index_type: IndexType) -> usize {
+    fn get_index_from_type(
+        list: &[Application],
+        current_index: usize,
+        index_type: IndexType,
+    ) -> usize {
         match index_type {
             IndexType::Start => 0,
             IndexType::End => list.len(),
@@ -153,14 +167,16 @@ impl Applications {
                 } else {
                     current_index - 1
                 }
-            },
+            }
         }
     }
 
     fn get_running_app_instance(app: &Application) -> Option<Retained<NSRunningApplication>> {
         unsafe {
             let running_applications = NSWorkspace::sharedWorkspace().runningApplications();
-            running_applications.iter().find(|item| item.localizedName().unwrap().to_string() == app.name)
+            running_applications
+                .iter()
+                .find(|item| item.localizedName().unwrap().to_string() == app.name)
         }
     }
 }

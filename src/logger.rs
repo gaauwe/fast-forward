@@ -1,4 +1,7 @@
-use std::{fs::{self, File}, panic, thread};
+use std::{
+    fs::{self, File},
+    panic, thread,
+};
 
 use env_logger::Builder;
 use log::{error, LevelFilter};

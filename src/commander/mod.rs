@@ -28,7 +28,8 @@ impl Commander {
                     .timer(Duration::from_millis(50))
                     .await;
             }
-        }).detach();
+        })
+        .detach();
 
         cx.set_global::<Commander>(Self { tx });
     }

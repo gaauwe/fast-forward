@@ -1,5 +1,5 @@
-use std::{fs, path::PathBuf};
 use anyhow::anyhow;
+use std::{fs, path::PathBuf};
 
 use gpui::{AssetSource, Result, SharedString};
 use rust_embed::RustEmbed;

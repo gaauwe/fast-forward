@@ -1,4 +1,4 @@
-use gpui::{App, IntoElement, RenderOnce, Styled, Transformation, Window, px, svg};
+use gpui::{px, svg, App, IntoElement, RenderOnce, Styled, Transformation, Window};
 
 use crate::theme::Theme;
 
@@ -10,16 +10,10 @@ pub(crate) struct Icon {
     transformation: Transformation,
 }
 
-#[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    Copy,
-    Clone,
-)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum IconName {
     ArrowCircle,
-    ExternalLink
+    ExternalLink,
 }
 
 pub enum IconSize {

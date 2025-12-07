@@ -1,24 +1,22 @@
 mod blink_cursor;
 
-use std::{ops::Range, sync::atomic::Ordering};
 use blink_cursor::BlinkCursor;
 use gpui::{
-    actions, div, fill, point, prelude::*, px, relative, size, App, AppContext, Bounds, CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, PaintQuad, Pixels, ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window
+    actions, div, fill, point, prelude::*, px, relative, size, App, AppContext, Bounds,
+    CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
+    Focusable, Global, GlobalElementId, KeyBinding, KeyDownEvent, LayoutId, PaintQuad, Pixels,
+    ShapedLine, SharedString, Style, TextRun, UTF16Selection, UnderlineStyle, Window,
 };
+use std::{ops::Range, sync::atomic::Ordering};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{applications::{Applications, IndexType}, hotkey::IS_ACTIVE, theme::Theme};
+use crate::{
+    applications::{Applications, IndexType},
+    hotkey::IS_ACTIVE,
+    theme::Theme,
+};
 
-actions!(
-    text_input,
-    [
-        Tab,
-        ShiftTab,
-        Backspace,
-        Left,
-        Right,
-    ]
-);
+actions!(text_input, [Tab, ShiftTab, Backspace, Left, Right,]);
 
 pub struct SearchQuery {
     pub value: String,
@@ -58,7 +56,8 @@ impl TextInput {
         };
 
         // Observe the blink cursor to repaint the view when it changes.
-        cx.observe(&input.blink_cursor, |_, _, cx| cx.notify()).detach();
+        cx.observe(&input.blink_cursor, |_, _, cx| cx.notify())
+            .detach();
 
         // Blink the cursor when the window is active, pause when it's not.
         cx.observe_window_activation(window, |input, window, cx| {
@@ -78,7 +77,8 @@ impl TextInput {
             if IS_ACTIVE.load(Ordering::SeqCst) {
                 cx.activate(true);
             }
-        }).detach();
+        })
+        .detach();
 
         cx.bind_keys([
             KeyBinding::new("tab", Tab, None),
@@ -89,14 +89,15 @@ impl TextInput {
         ]);
 
         cx.set_global(SearchQuery {
-            value: String::new()
+            value: String::new(),
         });
 
         cx.observe_global::<SearchQuery>(|input, cx| {
             if cx.global::<SearchQuery>().value.is_empty() {
                 input.clear(cx);
             }
-        }).detach();
+        })
+        .detach();
 
         input
     }
@@ -163,7 +164,12 @@ impl TextInput {
         });
     }
 
-    fn on_key_down_for_blink_cursor(&mut self, _: &KeyDownEvent, _window: &mut Window, cx: &mut Context<Self>) {
+    fn on_key_down_for_blink_cursor(
+        &mut self,
+        _: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.pause_blink_cursor(cx);
     }
 
@@ -263,7 +269,11 @@ impl EntityInputHandler for TextInput {
         })
     }
 
-    fn marked_text_range(&self, _window: &mut Window, _cx: &mut Context<Self>) -> Option<Range<usize>> {
+    fn marked_text_range(
+        &self,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> Option<Range<usize>> {
         self.marked_range
             .as_ref()
             .map(|range| self.range_to_utf16(range))
@@ -287,8 +297,7 @@ impl EntityInputHandler for TextInput {
             .unwrap_or(self.selected_range.clone());
 
         self.value =
-            (self.value[0..range.start].to_owned() + new_text + &self.value[range.end..])
-                .into();
+            (self.value[0..range.start].to_owned() + new_text + &self.value[range.end..]).into();
         self.selected_range = range.start + new_text.len()..range.start + new_text.len();
         self.marked_range.take();
 
@@ -316,12 +325,15 @@ impl EntityInputHandler for TextInput {
             .unwrap_or(self.selected_range.clone());
 
         self.value =
-            (self.value[0..range.start].to_owned() + new_text + &self.value[range.end..])
-                .into();
+            (self.value[0..range.start].to_owned() + new_text + &self.value[range.end..]).into();
         self.marked_range = Some(range.start..range.start + new_text.len());
         self.selected_range = new_selected_range_utf16
             .as_ref()
-            .map(|range_utf16| self.range_from_utf16(range_utf16)).map_or_else(|| range.start + new_text.len()..range.start + new_text.len(), |new_range| new_range.start + range.start..new_range.end + range.end);
+            .map(|range_utf16| self.range_from_utf16(range_utf16))
+            .map_or_else(
+                || range.start + new_text.len()..range.start + new_text.len(),
+                |new_range| new_range.start + range.start..new_range.end + range.end,
+            );
 
         cx.notify();
     }
@@ -481,10 +493,11 @@ impl Element for TextElement {
         window.handle_input(
             &focus_handle,
             ElementInputHandler::new(bounds, self.input.clone()),
-            cx
+            cx,
         );
         let line = prepaint.line.take().unwrap();
-        line.paint(bounds.origin, window.line_height(), window, cx).unwrap();
+        line.paint(bounds.origin, window.line_height(), window, cx)
+            .unwrap();
 
         if focus_handle.is_focused(window) {
             if let Some(cursor) = prepaint.cursor.take() {
